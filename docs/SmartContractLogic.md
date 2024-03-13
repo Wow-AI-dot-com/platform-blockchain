@@ -1,4 +1,6 @@
-Smart Contract Logic:
+# Smart Contract Logic:
+
+
 
 The Decentralized Compute MarketPlace include some of smart contracts:
 
@@ -322,10 +324,10 @@ contract UsageTracking {
 # **Scenarios & Solution**:
 
 
-| Scenario | Description                                                                                                                                                      | Solution                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Update to Smart Contract                                                                                                                                                           |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1        | - A single hardware card (GPU/CPU) is used for multiple training sessions simultinously                                                                          | - Implement capability and availbility tracking for resources<br />- CHeck whether session do not exceed the resource's maximum capacity'<br />- The ResourceRegistration contract now includes a maxConcurrentSessions field for each resource, indicating how many sessions it can handle simultaneously.<br />- Session Tracking: The UsageTracking contract includes logic to track the number of active sessions for each resource, incrementing this count when a session starts and decrementing it when a session ends. <br />- Capacity Check: Before starting a new session, the UsageTracking contract checks if the resource's current number of active sessions is less than its maximum capacity.                                                                | - Update ResourceRegistration to include capacity metadata<br />- Update UsageTracking to check current active session against resource capacity before initiating a new session  |
-| 2        | - Hardware (GPU/CPU) registered in the marketplace is not as described (fake) or is replaced without notification, leading to potential misinformation or misuse | **Option 1: **Resource Verification and Reporting**:**<br />- Implement a function that allows users or verifiers to report resources that do not match their description or perform below expectations. <br />- Upon receiving reports, the system can flag resources for review and temporarily suspend them from being booked until verification is complete. <br /><br />**Option 2: Automated Verification (Request AI team for more advance, ask Quoi):**<br />- For a more automated approach, consider integrating off-chain components that can periodically verify the specifications and performance of registered hardware. <br />- This might involve running benchmark tests or verification protocols that report back to the smart contract. |                                                                                                                                                                                    |
+| Scenario | Description                                                                                                                                                      | Solution                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Update to Smart Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1        | - A single hardware card (GPU/CPU) is used for multiple training sessions simultinously                                                                          | - Implement capability and availbility tracking for resources<br />- CHeck whether session do not exceed the resource's maximum capacity'<br />- The ResourceRegistration contract now includes a maxConcurrentSessions field for each resource, indicating how many sessions it can handle simultaneously.<br />- Session Tracking: The UsageTracking contract includes logic to track the number of active sessions for each resource, incrementing this count when a session starts and decrementing it when a session ends. <br />- Capacity Check: Before starting a new session, the UsageTracking contract checks if the resource's current number of active sessions is less than its maximum capacity.                                                                | - Update ResourceRegistration to include capacity metadata<br />- Update UsageTracking to check current active session against resource capacity before initiating a new session                                                                                                                                                                                                                                                                                                                                                                                 |
+| 2        | - Hardware (GPU/CPU) registered in the marketplace is not as described (fake) or is replaced without notification, leading to potential misinformation or misuse | **Option 1: **Resource Verification and Reporting**:**<br />- Implement a function that allows users or verifiers to report resources that do not match their description or perform below expectations. <br />- Upon receiving reports, the system can flag resources for review and temporarily suspend them from being booked until verification is complete. <br /><br />**Option 2: Automated Verification (Request AI team for more advance, ask Quoi):**<br />- For a more automated approach, consider integrating off-chain components that can periodically verify the specifications and performance of registered hardware. <br />- This might involve running benchmark tests or verification protocols that report back to the smart contract. | - Defines a UsageSession struct to store session details and uses mappings to track sessions and the count of active sessions per resource.<br />- Events: SessionStarted and SessionEnded events for logging session activity. <br />- Session Management: Implements startSession and endSession functions to manage the lifecycle of usage sessions, including capacity checks to ensure resources are not overutilized. <br />- Interaction with Other Contracts: Interfaces with ResourceRegistration for resource details and Pricing for billing purposes. |
 
 
 
@@ -396,3 +398,143 @@ function registerResource(string memory _resourceType, string memory _provider, 
 
 
 ## Solution for scenario 2:
+
+Solution: 
+
+* the `ResourceRegistration` contract inherits from OpenZeppelin's `Ownable` to use the `onlyOwner` modifier.
+* Removed `_underVerification` from the `registerResource` function parameters and set it to `false` by default when a new resource is registered. This is because new resources shouldn't be under verification initially.
+* Added the `Ownable` import from OpenZeppelin to enable the `onlyOwner` modifier usage for functions like `setResourceVerificationStatus`.
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract ResourceRegistration {
+    // Add a new field to the Resource struct for maximum concurrent sessions
+    struct Resource {
+        uint256 id;
+        string resourceType; // LabelingTool, Storage, MLNotebook, MLTraining
+        string provider; // e.g., "Intel"
+        uint256 cpu; // Number of CPUs for the resource
+        uint256 gpu; // Number of GPUs for the resource
+        uint256 ram; // Amount of RAM in GB
+        uint256 disk; // Disk space in GB
+        uint256 pricePerHour; // Price per hour in tokens
+        bool available; // Availability of the resource
+        uint256 maxConcurrentSessions; // NEW: Max number of concurrent sessions
+        bool underVerification; // Indicates whether the resource is under verification due to a report
+
+}
+
+    Resource[] public resources;
+    mapping(uint256 => address) public resourceToOwner; // Maps resource ID to owner address
+    mapping(uint256 => bool) public reportedResources; // Tracks resources that have been reported for review
+    uint256 public nextResourceId = 0;
+
+    // Events
+    event ResourceRegistered(uint256 indexed resourceId, string resourceType, string provider);
+    event ResourceUpdated(uint256 indexed resourceId);
+    event ResourceAvailabilityChanged(uint256 indexed resourceId, bool available);
+    event ResourceReported(uint256 indexed resourceId, address reporter);
+    event ResourceVerificationStatusChanged(uint256 indexed resourceId, bool underVerification);
+
+
+    // Modifier to restrict actions to the resource owner
+    modifier onlyResourceOwner(uint256 resourceId) {
+        require(resourceToOwner[resourceId] == msg.sender, "Caller is not the resource owner");
+        _;
+    }
+
+    // Register a new resource
+    // Register a new resource
+    function registerResource(
+        string memory _resourceType, 
+        string memory _provider, 
+        uint256 _cpu, 
+        uint256 _gpu, 
+        uint256 _ram, 
+        uint256 _disk, 
+        uint256 _pricePerHour, 
+        uint256 _maxConcurrentSessions
+    ) public {
+        resources.push(Resource({
+            id: nextResourceId,
+            resourceType: _resourceType,
+            provider: _provider,
+            cpu: _cpu,
+            gpu: _gpu,
+            ram: _ram,
+            disk: _disk,
+            pricePerHour: _pricePerHour,
+            available: true,
+            maxConcurrentSessions: _maxConcurrentSessions,
+            underVerification: false // Initially, resources are not under verification
+        }));
+        resourceToOwner[nextResourceId] = msg.sender;
+        emit ResourceRegistered(nextResourceId, _resourceType, _provider);
+        nextResourceId++;
+    }
+
+
+    // Function to update the verification status of a resource, callable by the contract owner or a designated verifier
+    function setResourceVerificationStatus(uint256 _resourceId, bool _underVerification) public {
+        require(_resourceId < nextResourceId, "Resource does not exist");
+        require(reportedResources[_resourceId], "Resource not reported");
+
+        resources[_resourceId].underVerification = _underVerification;
+        if(!_underVerification) {
+            // If resource verification is complete and the resource is cleared, reset its reported status
+            reportedResources[_resourceId] = false;
+        }
+
+        emit ResourceVerificationStatusChanged(_resourceId, _underVerification);
+    }
+  
+    // Function to report a resource for verification
+    function reportResource(uint256 _resourceId) public {
+        require(_resourceId < nextResourceId, "Resource does not exist");
+        require(!reportedResources[_resourceId], "Resource already reported");
+        reportedResources[_resourceId] = true;
+        resources[_resourceId].underVerification = true;
+
+        emit ResourceReported(_resourceId, msg.sender);
+    }
+
+
+    // Make sure this function is defined and marked as public or external
+    function getResourcePricePerHour(uint256 resourceId) external view returns (uint256) {
+        require(resourceId < nextResourceId, "Resource does not exist");
+        return resources[resourceId].pricePerHour;
+    }
+
+    // Update resource details
+    function updateResource(uint256 _id, uint256 _cpu, uint256 _gpu, uint256 _ram, uint256 _disk, uint256 _pricePerHour) public onlyResourceOwner(_id) {
+        Resource storage resource = resources[_id];
+        resource.cpu = _cpu;
+        resource.gpu = _gpu;
+        resource.ram = _ram;
+        resource.disk = _disk;
+        resource.pricePerHour = _pricePerHour;
+        emit ResourceUpdated(_id);
+    }
+
+    // Change the availability of a resource
+    function setResourceAvailability(uint256 _id, bool _available) public onlyResourceOwner(_id) {
+        Resource storage resource = resources[_id];
+        resource.available = _available;
+        emit ResourceAvailabilityChanged(_id, _available);
+    }
+
+    // Get details of a resource
+    function getResource(uint256 _id) public view returns (Resource memory) {
+        require(_id < nextResourceId, "Resource does not exist");
+        return resources[_id];
+    }
+
+    // Get total number of resources
+    function getTotalResources() public view returns (uint256) {
+        return nextResourceId;
+    }
+}
+
+```
