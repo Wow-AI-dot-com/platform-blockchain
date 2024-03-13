@@ -584,3 +584,5 @@ contract ResourceRegistration {
 }
 
 ```
+
+* Note: In a more advanced implementation, the AiXBlock could leverage a decentralized network of verifiers who, through consensus mechanisms, agree on the verification status of a resource. This could reduce the need for a centralized admin and distribute the verification workload.
