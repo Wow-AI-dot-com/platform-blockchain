@@ -133,7 +133,7 @@ contract ResourceRegistration {
 
 ```
 
-# **Pricing.sol**
+# **Smart Contract 2: Pricing.sol**
 
 * **AXB Token Integration** :
   * This (Pricning contract)) contract integrates with an ERC20 token (AXB) for handling payments.
@@ -252,4 +252,147 @@ contract Pricing is Ownable, ReentrancyGuard {
 
 ```
 
+
+
 # Smart Contract 3: UsageTracking.sol
+
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "./ResourceRegistration.sol";
+import "./Pricing.sol";
+
+contract UsageTracking {
+    ResourceRegistration public resourceRegistration;
+    Pricing public pricingContract;
+
+    struct UsageSession {
+        uint256 resourceId;
+        address user;
+        uint256 startTime;
+        uint256 endTime;
+    }
+
+    mapping(uint256 => UsageSession) public sessions;
+    uint256 public nextSessionId = 0;
+
+    event SessionStarted(uint256 indexed sessionId, uint256 indexed resourceId, address user);
+    event SessionEnded(uint256 indexed sessionId, uint256 indexed resourceId, address user);
+
+    constructor(address _resourceRegistrationAddress, address _pricingAddress) {
+        resourceRegistration = ResourceRegistration(_resourceRegistrationAddress);
+        pricingContract = Pricing(_pricingAddress);
+    }
+
+    function startSession(uint256 _resourceId) external {
+        require(resourceRegistration.isResourceAvailable(_resourceId), "Resource not available");
+    
+        sessions[nextSessionId] = UsageSession({
+            resourceId: _resourceId,
+            user: msg.sender,
+            startTime: block.timestamp,
+            endTime: 0
+        });
+    
+        emit SessionStarted(nextSessionId, _resourceId, msg.sender);
+        nextSessionId++;
+    }
+
+    function endSession(uint256 _sessionId) external {
+        UsageSession storage session = sessions[_sessionId];
+        require(msg.sender == session.user, "Only the session initiator can end it");
+        require(session.endTime == 0, "Session already ended");
+
+        session.endTime = block.timestamp;
+    
+        emit SessionEnded(_sessionId, session.resourceId, msg.sender);
+
+        // Notify the Pricing contract to calculate and deduct cost
+        uint256 duration = session.endTime - session.startTime;
+        pricingContract.calculateCost(session.resourceId, session.user, duration);
+    }
+}
+
+```
+
+
+
+# **Scenarios & Solution**:
+
+
+| Scenario | Description                                                                                                                                                      | Solution                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Update to Smart Contract                                                                                                                                                           |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1        | - A single hardware card (GPU/CPU) is used for multiple training sessions simultinously                                                                          | - Implement capability and availbility tracking for resources<br />- CHeck whether session do not exceed the resource's maximum capacity'<br />- The ResourceRegistration contract now includes a maxConcurrentSessions field for each resource, indicating how many sessions it can handle simultaneously.<br />- Session Tracking: The UsageTracking contract includes logic to track the number of active sessions for each resource, incrementing this count when a session starts and decrementing it when a session ends. <br />- Capacity Check: Before starting a new session, the UsageTracking contract checks if the resource's current number of active sessions is less than its maximum capacity.                                                                | - Update ResourceRegistration to include capacity metadata<br />- Update UsageTracking to check current active session against resource capacity before initiating a new session  |
+| 2        | - Hardware (GPU/CPU) registered in the marketplace is not as described (fake) or is replaced without notification, leading to potential misinformation or misuse | **Option 1: **Resource Verification and Reporting**:**<br />- Implement a function that allows users or verifiers to report resources that do not match their description or perform below expectations. <br />- Upon receiving reports, the system can flag resources for review and temporarily suspend them from being booked until verification is complete. <br /><br />**Option 2: Automated Verification (Request AI team for more advance, ask Quoi):**<br />- For a more automated approach, consider integrating off-chain components that can periodically verify the specifications and performance of registered hardware. <br />- This might involve running benchmark tests or verification protocols that report back to the smart contract. |                                                                                                                                                                                    |
+
+
+
+## Solution for Scenario 1:
+
+- Update ResourceRegistration.sol contract
+
+```solidity
+// Add a new field to the Resource struct for maximum concurrent sessions
+struct Resource {
+    uint256 id;
+    string resourceType; // LabelingTool, Storage, MLNotebook, MLTraining
+    string provider; // e.g., "Intel"
+    uint256 cpu; // Number of CPUs for the resource
+    uint256 gpu; // Number of GPUs for the resource
+    uint256 ram; // Amount of RAM in GB
+    uint256 disk; // Disk space in GB
+    uint256 pricePerHour; // Price per hour in tokens
+    bool available; // Availability of the resource
+    uint256 maxConcurrentSessions; // NEW: Max number of concurrent sessions
+}
+
+// Update the registerResource function to accept maxConcurrentSessions
+function registerResource(string memory _resourceType, string memory _provider, uint256 _cpu, uint256 _gpu, uint256 _ram, uint256 _disk, uint256 _pricePerHour, uint256 _maxConcurrentSessions) public {
+    resources.push(Resource(nextResourceId, _resourceType, _provider, _cpu, _gpu, _ram, _disk, _pricePerHour, true, _maxConcurrentSessions));
+    resourceToOwner[nextResourceId] = msg.sender;
+    emit ResourceRegistered(nextResourceId, _resourceType, _provider);
+    nextResourceId++;
+}
+
+```
+
+- Update **UsageTracking.sol** contract:
+  ```solidity
+  mapping(uint256 => uint256) private activeSessionsCount; // Tracks active sessions per resource ID
+
+  function startSession(uint256 _resourceId) external {
+      ResourceRegistration.Resource memory resource = resourceRegistration.getResource(_resourceId);
+      require(resource.available, "Resource not available");
+      require(activeSessionsCount[_resourceId] < resource.maxConcurrentSessions, "Resource at full capacity");
+    
+      sessions[nextSessionId] = UsageSession({
+          resourceId: _resourceId,
+          user: msg.sender,
+          startTime: block.timestamp,
+          endTime: 0
+      });
+    
+      activeSessionsCount[_resourceId]++; // Increment active session count for the resource
+      emit SessionStarted(nextSessionId, _resourceId, msg.sender);
+      nextSessionId++;
+  }
+
+  function endSession(uint256 _sessionId) external {
+      UsageSession storage session = sessions[_sessionId];
+      require(msg.sender == session.user, "Only the session initiator can end it");
+      require(session.endTime == 0, "Session already ended");
+
+      session.endTime = block.timestamp;
+      activeSessionsCount[session.resourceId]--; // Decrement active session count for the resource
+    
+      emit SessionEnded(_sessionId, session.resourceId, msg.sender);
+    
+      // Proceed to notify the Pricing contract to calculate and deduct cost
+  }
+
+  ```
+
+
+## Solution for scenario 2:
