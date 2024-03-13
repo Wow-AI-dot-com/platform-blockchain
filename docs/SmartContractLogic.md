@@ -1,7 +1,6 @@
 Smart Contract Logic:
 
-
-The Decentralized Compute MarketPlace include some of smart contracts: 
+The Decentralized Compute MarketPlace include some of smart contracts:
 
 * AXBToken.sol
 * ResourceRegistration.sol
@@ -29,7 +28,6 @@ contract AXBToken is ERC20 {
 
 ```
 
-
 # **SC 1: Resource Registration Contract** :
 
 * Handles the registration of compute resources, regardless of whether:
@@ -45,7 +43,6 @@ contract AXBToken is ERC20 {
     * ML notebooks,
     * and ML training capabilities,
       along with their specifications (CPU, GPU, RAM, disk space) and rental price.
-
 
 | **Component**              | **Description**                                                                                                                                                                                                                                                                                                                                                                       |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -136,9 +133,7 @@ contract ResourceRegistration {
 
 ```
 
-
 # **Pricing.sol**
-
 
 * **AXB Token Integration** :
   * This (Pricning contract)) contract integrates with an ERC20 token (AXB) for handling payments.
@@ -197,8 +192,7 @@ sequenceDiagram
 
 ```
 
-
-```
+```solidity
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
@@ -257,6 +251,5 @@ contract Pricing is Ownable, ReentrancyGuard {
 }
 
 ```
-
 
 # Smart Contract 3: UsageTracking.sol
