@@ -331,9 +331,32 @@ contract UsageTracking {
 
 
 
-## Solution for Scenario 1:
+## *Solution for Scenario 1:*
 
-- Update ResourceRegistration.sol contract
+- **Scenario description:**
+  ```mermaid
+  sequenceDiagram
+      participant User as User
+      participant UT as UsageTracking Contract
+      participant RR as ResourceRegistration Contract
+      participant P as Pricing Contract
+      User->>UT: startSession(resourceId)
+      UT->>RR: isResourceAvailable(resourceId)
+      RR->>UT: Yes, and capacity details
+      alt If capacity is sufficient
+          UT->>UT: Increment active session count
+          UT-->>User: Session started
+          User->>UT: endSession(sessionId)
+          UT->>P: calculateCost(...)
+          P-->>User: Cost deducted
+      else If capacity is insufficient
+          UT-->>User: Error: Capacity reached
+      end
+
+  ```
+
+  Process of checking a hardware card's capacity for multiple concurrent training sessions.
+- ***Update ResourceRegistration.sol contract***
 
 ```solidity
 // Add a new field to the Resource struct for maximum concurrent sessions
@@ -399,13 +422,36 @@ function registerResource(string memory _resourceType, string memory _provider, 
 
 ## Solution for scenario 2:
 
-Solution: 
+Scenario Description:
+
+```mermaid
+sequenceDiagram
+    participant User as User/Verifier
+    participant RR as ResourceRegistration Contract
+    participant Admin as Admin/Verifier
+    User->>RR: reportResource(resourceId)
+    RR-->>User: Resource reported
+    loop Verification Process
+        Admin->>RR: Check reported resource
+        RR-->>Admin: Resource details
+    end
+    alt If resource fails verification
+        Admin->>RR: setResourceVerificationStatus(resourceId, false)
+        RR-->>Admin: Resource marked as under verification
+    else If resource passes verification
+        Admin->>RR: setResourceVerificationStatus(resourceId, true)
+        RR-->>Admin: Resource verified and available
+    end
+
+```
+
+Solution**:
 
 * the `ResourceRegistration` contract inherits from OpenZeppelin's `Ownable` to use the `onlyOwner` modifier.
 * Removed `_underVerification` from the `registerResource` function parameters and set it to `false` by default when a new resource is registered. This is because new resources shouldn't be under verification initially.
 * Added the `Ownable` import from OpenZeppelin to enable the `onlyOwner` modifier usage for functions like `setResourceVerificationStatus`.
 
-```solidity
+```Solidi
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
