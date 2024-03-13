@@ -1,7 +1,5 @@
 # Smart Contract Logic:
 
-
-
 The Decentralized Compute MarketPlace include some of smart contracts:
 
 * AXBToken.sol
@@ -160,6 +158,50 @@ contract ResourceRegistration {
   * **Ensures the user has sufficient balance to cover the cost and deducts the calculated amount.
 * **Cost Calculation** :
   * The `calculateCost` helper function computes the usage cost based on the resource's `pricePerHour` and the usage duration in seconds, converting the duration to hours for billing purposes.
+  *  in the `Pricing` and `UsageTracking` contracts, focusing on a pay-as-you-go model.
+
+### a. Pricing Calculation Equation
+
+The cost of using a computing resource in the marketplace is typically calculated based on the duration of usage and the resource's price per hour. 
+
+The equation for calculating the price (`Cost`) of a usage session is:
+
+`Cost=(Duration in seconds / 3600)×Price per Hour `
+
+**Where**:
+
+* **Duration in seconds**:
+  * is the length of the usage session, calculated as the difference between the session's end time and start time.
+* **Price per Hour:**
+  * is the cost of using the resource for one hour, specified when the resource is registered.
+
+
+### b. Detailed Logic for Pricing and Usage Tracking
+
+* **step 1: Resource Registration**
+
+  * **Resource Capability** : When a resource is registered (`registerResource` function), its specifications, including `maxConcurrentSessions` and `pricePerHour`, are stored. This sets the basis for capacity checks and pricing.
+* **step 2: Session Management** in `UsageTracking`
+
+  * **Session Start** (`startSession`):
+    * Checks if the resource is available and not exceeding its `maxConcurrentSessions`.
+    * Records the `startTime` of the session, the `resourceId`, and the user's address.
+* **Step 3: Session End** (`endSession`):
+
+  * Validates that the session is active and that the user ending the session is the one who started it.
+  * Records the `endTime` of the session.
+  * Calls the `Pricing` contract to calculate the cost based on the usage duration and resource's price per hour.
+* **Price Calculation** in `Pricing`
+
+  * **Calculate Cost and Deduct Balance** :
+    * Upon receiving details of a session's end (`endSession`), the `Pricing` contract calculates the cost using the equation provided.
+    * Deducts the calculated cost from the user's pre-deposited balance.
+    * Handles insufficient balance errors by reverting the transaction or flagging the user/session for manual review.
+* **Example**:
+
+  * iff a user utilizes a GPU for training with a `pricePerHour` of 0.05 ETH for 7200 seconds (2 hours), the cost calculation would be:
+    *Cost  =(7200/3600)×0.05 AXB = 0.1 AXB*
+
 
 ```mermaid
 sequenceDiagram
@@ -254,10 +296,7 @@ contract Pricing is Ownable, ReentrancyGuard {
 
 ```
 
-
-
 # Smart Contract 3: UsageTracking.sol
-
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -290,14 +329,14 @@ contract UsageTracking {
 
     function startSession(uint256 _resourceId) external {
         require(resourceRegistration.isResourceAvailable(_resourceId), "Resource not available");
-    
+  
         sessions[nextSessionId] = UsageSession({
             resourceId: _resourceId,
             user: msg.sender,
             startTime: block.timestamp,
             endTime: 0
         });
-    
+  
         emit SessionStarted(nextSessionId, _resourceId, msg.sender);
         nextSessionId++;
     }
@@ -308,7 +347,7 @@ contract UsageTracking {
         require(session.endTime == 0, "Session already ended");
 
         session.endTime = block.timestamp;
-    
+  
         emit SessionEnded(_sessionId, session.resourceId, msg.sender);
 
         // Notify the Pricing contract to calculate and deduct cost
@@ -319,21 +358,17 @@ contract UsageTracking {
 
 ```
 
-
-
 # **Scenarios & Solution**:
-
 
 | Scenario | Description                                                                                                                                                      | Solution                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Update to Smart Contract                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1        | - A single hardware card (GPU/CPU) is used for multiple training sessions simultinously                                                                          | - Implement capability and availbility tracking for resources<br />- CHeck whether session do not exceed the resource's maximum capacity'<br />- The ResourceRegistration contract now includes a maxConcurrentSessions field for each resource, indicating how many sessions it can handle simultaneously.<br />- Session Tracking: The UsageTracking contract includes logic to track the number of active sessions for each resource, incrementing this count when a session starts and decrementing it when a session ends. <br />- Capacity Check: Before starting a new session, the UsageTracking contract checks if the resource's current number of active sessions is less than its maximum capacity.                                                                | - Update ResourceRegistration to include capacity metadata<br />- Update UsageTracking to check current active session against resource capacity before initiating a new session                                                                                                                                                                                                                                                                                                                                                                                 |
 | 2        | - Hardware (GPU/CPU) registered in the marketplace is not as described (fake) or is replaced without notification, leading to potential misinformation or misuse | **Option 1: **Resource Verification and Reporting**:**<br />- Implement a function that allows users or verifiers to report resources that do not match their description or perform below expectations. <br />- Upon receiving reports, the system can flag resources for review and temporarily suspend them from being booked until verification is complete. <br /><br />**Option 2: Automated Verification (Request AI team for more advance, ask Quoi):**<br />- For a more automated approach, consider integrating off-chain components that can periodically verify the specifications and performance of registered hardware. <br />- This might involve running benchmark tests or verification protocols that report back to the smart contract. | - Defines a UsageSession struct to store session details and uses mappings to track sessions and the count of active sessions per resource.<br />- Events: SessionStarted and SessionEnded events for logging session activity. <br />- Session Management: Implements startSession and endSession functions to manage the lifecycle of usage sessions, including capacity checks to ensure resources are not overutilized. <br />- Interaction with Other Contracts: Interfaces with ResourceRegistration for resource details and Pricing for billing purposes. |
 
-
-
 ## *Solution for Scenario 1:*
 
 - **Scenario description:**
+
   ```mermaid
   sequenceDiagram
       participant User as User
@@ -391,14 +426,14 @@ function registerResource(string memory _resourceType, string memory _provider, 
       ResourceRegistration.Resource memory resource = resourceRegistration.getResource(_resourceId);
       require(resource.available, "Resource not available");
       require(activeSessionsCount[_resourceId] < resource.maxConcurrentSessions, "Resource at full capacity");
-    
+
       sessions[nextSessionId] = UsageSession({
           resourceId: _resourceId,
           user: msg.sender,
           startTime: block.timestamp,
           endTime: 0
       });
-    
+
       activeSessionsCount[_resourceId]++; // Increment active session count for the resource
       emit SessionStarted(nextSessionId, _resourceId, msg.sender);
       nextSessionId++;
@@ -411,14 +446,13 @@ function registerResource(string memory _resourceType, string memory _provider, 
 
       session.endTime = block.timestamp;
       activeSessionsCount[session.resourceId]--; // Decrement active session count for the resource
-    
+
       emit SessionEnded(_sessionId, session.resourceId, msg.sender);
-    
+
       // Proceed to notify the Pricing contract to calculate and deduct cost
   }
 
   ```
-
 
 ## Solution for scenario 2:
 
