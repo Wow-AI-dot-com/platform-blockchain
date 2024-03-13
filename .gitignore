@@ -1,5 +1,3 @@
 /api-server/node_modules
 node_modules
 .env
-api-server
-system-wallet

@@ -2,7 +2,9 @@
 
 This part implements a decentralized marketplace for computing resources, allowing users to register resources (e.g., GPUs, CPUs), track usage, and handle billing through smart contracts on the EVM-based blockchain.
 
-Details of design can be found in [docs/SmartContractLogic.md](docs/SmartContractLogic.md):
+* Details of design can be found in [docs/SmartContractLogic.md](docs/SmartContractLogic.md)
+* List of APIs - tobe updated: [docs/APIs.md](docs/APIs.md)
+
 
 ## Features
 
