@@ -57,20 +57,6 @@ class EndSessionModel(BaseModel):
 class WithdrawTokensModel(BaseModel):
     amount: float
 
-class ReportResourceModel(BaseModel):
-    resourceId: int
-
-class ResourceAvailabilityModel(BaseModel):
-    resourceId: int
-    available: bool
-
-class VerificationStatusModel(BaseModel):
-    resourceId: int
-    underVerification: bool
-
-
-class ResourceDetailModel(BaseModel):
-    resourceId: int
 
 class UpdateResourceModel(BaseModel):
     resourceId: int
@@ -123,67 +109,3 @@ def end_session(session: EndSessionModel):
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
     return {"transaction_receipt": receipt.transactionHash.hex()}
 
-
-@app.post("/withdraw_tokens/")
-def withdraw_tokens(data: WithdrawTokensModel):
-    #  the `withdrawTokens` function exists in the Pricing contract
-    tx = pricing.functions.withdrawTokens(
-        Web3.toWei(data.amount, 'ether')
-    ).buildTransaction({'from': default_account.address, 'nonce': w3.eth.getTransactionCount(default_account.address)})
-    signed_tx = default_account.sign_transaction(tx)
-    tx_hash = w3.eth.sendRawTransaction(signed_tx.rawTransaction)
-    return {"transaction_hash": tx_hash.hex()}
-
-@app.post("/report_resource/")
-def report_resource(data: ReportResourceModel):
-    #  the `reportResource` function exists in ResourceRegistration contract
-    tx = resource_registration.functions.reportResource(
-        data.resourceId
-    ).buildTransaction({'from': default_account.address, 'nonce': w3.eth.getTransactionCount(default_account.address)})
-    signed_tx = default_account.sign_transaction(tx)
-    tx_hash = w3.eth.sendRawTransaction(signed_tx.rawTransaction)
-    return {"transaction_hash": tx_hash.hex()}
-
-@app.post("/set_resource_availability/")
-def set_resource_availability(data: ResourceAvailabilityModel):
-    #  the `setResourceAvailability` function exists in your ResourceRegistration contract
-    tx = resource_registration.functions.setResourceAvailability(
-        data.resourceId, data.available
-    ).buildTransaction({'from': default_account.address, 'nonce': w3.eth.getTransactionCount(default_account.address)})
-    signed_tx = default_account.sign_transaction(tx)
-    tx_hash = w3.eth.sendRawTransaction(signed_tx.rawTransaction)
-    return {"transaction_hash": tx_hash.hex()}
-
-@app.post("/update_verification_status/")
-def update_verification_status(data: VerificationStatusModel):
-    #  an updateVerificationStatus method in  smart contract to update resource verification
-    tx = resource_registration.functions.setResourceVerificationStatus(
-        data.resourceId, data.underVerification
-    ).buildTransaction({
-        'from': default_account.address,
-        'nonce': w3.eth.getTransactionCount(default_account.address)
-    })
-    signed_tx = default_account.sign_transaction(tx)
-    tx_hash = w3.eth.sendRawTransaction(signed_tx.rawTransaction)
-    return {"transaction_hash": tx_hash.hex()}
-
-@app.get("/get_resource_details/")
-def get_resource_details(data: ResourceDetailModel):
-    resource_details = resource_registration.functions.getResource(data.resourceId).call()
-    return {"resource_details": resource_details}
-
-@app.post("/update_resource/")
-def update_resource(data: UpdateResourceModel):
-    tx = resource_registration.functions.updateResource(
-        data.resourceId, data.cpu, data.gpu, data.ram, data.disk,
-        Web3.toWei(data.price_per_hour, 'ether') if data.price_per_hour else None,
-        data.max_concurrent_sessions
-    ).buildTransaction({'from': default_account.address, 'nonce': w3.eth.getTransactionCount(default_account.address)})
-    signed_tx = default_account.sign_transaction(tx)
-    tx_hash = w3.eth.sendRawTransaction(signed_tx.rawTransaction)
-    return {"transaction_hash": tx_hash.hex()}
-
-@app.get("/get_session_details/")
-def get_session_details(data: SessionDetailModel):
-    session_details = usage_tracking.functions.getSession(data.sessionId).call()
-    return {"session_details": session_details}
