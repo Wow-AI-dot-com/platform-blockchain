@@ -4,6 +4,8 @@ import os
 import json
 from dotenv import load_dotenv
 from pydantic import BaseModel
+from typing import Optional
+
 
 load_dotenv()
 
@@ -65,6 +67,22 @@ class ResourceAvailabilityModel(BaseModel):
 class VerificationStatusModel(BaseModel):
     resourceId: int
     underVerification: bool
+
+
+class ResourceDetailModel(BaseModel):
+    resourceId: int
+
+class UpdateResourceModel(BaseModel):
+    resourceId: int
+    cpu: Optional[int] = None
+    gpu: Optional[int] = None
+    ram: Optional[int] = None
+    disk: Optional[int] = None
+    price_per_hour: Optional[float] = None
+    max_concurrent_sessions: Optional[int] = None
+
+class SessionDetailModel(BaseModel):
+    sessionId: int
 
 
 # ResourceRegistration endpoint
@@ -149,3 +167,23 @@ def update_verification_status(data: VerificationStatusModel):
     tx_hash = w3.eth.sendRawTransaction(signed_tx.rawTransaction)
     return {"transaction_hash": tx_hash.hex()}
 
+@app.get("/get_resource_details/")
+def get_resource_details(data: ResourceDetailModel):
+    resource_details = resource_registration.functions.getResource(data.resourceId).call()
+    return {"resource_details": resource_details}
+
+@app.post("/update_resource/")
+def update_resource(data: UpdateResourceModel):
+    tx = resource_registration.functions.updateResource(
+        data.resourceId, data.cpu, data.gpu, data.ram, data.disk,
+        Web3.toWei(data.price_per_hour, 'ether') if data.price_per_hour else None,
+        data.max_concurrent_sessions
+    ).buildTransaction({'from': default_account.address, 'nonce': w3.eth.getTransactionCount(default_account.address)})
+    signed_tx = default_account.sign_transaction(tx)
+    tx_hash = w3.eth.sendRawTransaction(signed_tx.rawTransaction)
+    return {"transaction_hash": tx_hash.hex()}
+
+@app.get("/get_session_details/")
+def get_session_details(data: SessionDetailModel):
+    session_details = usage_tracking.functions.getSession(data.sessionId).call()
+    return {"session_details": session_details}
