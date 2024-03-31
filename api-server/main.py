@@ -32,6 +32,9 @@ load_dotenv()
 global app
 app = FastAPI()
 
+mongo_host = os.getenv('MONGODB_HOST', 'mongodb://admin:admin123@localhost:27017/')
+redis_host = os.getenv('REDIS_HOST', 'redis://localhost')
+
 # Setup Web3 connection
 app.w3 = Web3(Web3.HTTPProvider(os.getenv("WEB3_PROVIDER")))
 private_key = os.getenv("PRIVATE_KEY")
@@ -161,9 +164,9 @@ scheduler.add_job(token_price_job, 'interval', minutes=1)
 
 @app.on_event("startup")
 async def startup_db_client():
-    app.mongodb_client = AsyncIOMotorClient('mongodb://admin:admin123@localhost:27017/')
+    app.mongodb_client = AsyncIOMotorClient(mongo_host)
     app.mongodb = app.mongodb_client['wow']
-    app.r = await aioredis.from_url('redis://localhost')
+    app.r = await aioredis.from_url(redis_host)
     app.queue = asyncio.Queue()
     scheduler.start()
     
@@ -194,13 +197,13 @@ async def register_resource(resource: CreateWallet):
     print(private_key)
     hash_private_key = encrypt_private_key(private_key)
     wallet = Wallet(userId=resource.userId, walletAddress=account.address.lower(), privateKey=hash_private_key)
-    print(decrypt_private_key(hash_private_key))
     save_wallet = await create_item_if_not_exist(wallet)
         
     wallet_response = WalletResponse(
         userId=save_wallet["userId"],
         walletAddress=save_wallet["walletAddress"],
-        role=save_wallet["role"],
+        balance=save_wallet["balance"],
+        pendingBalance=save_wallet["pendingBalance"],
     )
 
     return { "data": wallet_response }

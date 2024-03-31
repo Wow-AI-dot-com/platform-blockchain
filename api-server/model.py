@@ -9,7 +9,6 @@ class Wallet(BaseModel):
     privateKey: str
     balance: str = '0'
     pendingBalance: str = '0'
-    role: str = 'Builder'
     hasApproved: bool = False
     createdAt: datetime = datetime.now()
     updatedAt: datetime = datetime.now()

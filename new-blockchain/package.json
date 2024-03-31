@@ -3,7 +3,7 @@
   "scripts": {
     "deployATM88:bscTestnet": "npx hardhat run ./scripts/coin/deployATM88Main.ts --network bscTestnet",
     "deployMarketplace:bscTestnet": "npx hardhat run ./scripts/marketplace/deployMarketplaceMain.ts --network bscTestnet",
-    "verify:bscTestnet": " npx hardhat verify 0x99c3fE9c3D32c24eB0391c2B8EC482A96f2a6116 --network bscTestnet",
+    "verify:bscTestnet": " npx hardhat verify 0xC0A0dD70d7316f63f13EC5141a9d276AcE6B3D63 --network bscTestnet",
     "deployATM88:bsc": "npx hardhat run ./scripts/coin/deployATM88Main.ts --network bsc",
     "deployMarketplace:bsc": "npx hardhat run ./scripts/marketplace/deployMarketplaceMain.ts --network bsc",
     "verify:bsc": " npx hardhat verify  0x43d0ed3e0209B4c7F9d5013434217A2f8b77eB68 --network bsc",

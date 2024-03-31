@@ -33,8 +33,8 @@ async def get_key(redis, key):
 
 
 # add your blockchain connection information
-web3 = Web3(Web3.HTTPProvider('https://data-seed-prebsc-1-s1.binance.org:8545/'))
-mongodb_client = AsyncIOMotorClient('mongodb://admin:admin123@localhost:27017/')
+web3 = Web3(Web3.HTTPProvider(os.getenv("WEB3_PROVIDER")))
+mongodb_client = AsyncIOMotorClient(os.getenv('MONGODB_HOST', 'mongodb://admin:admin123@localhost:27017/'))
 mongodb = mongodb_client['wow']
 
 # uniswap address and abi
@@ -127,7 +127,7 @@ async def log_loop(event_filter, poll_interval):
 # try to run the log_loop function above every 2 seconds
 async def main():
     global r
-    r = await aioredis.from_url('redis://localhost')
+    r = await aioredis.from_url(os.getenv('REDIS_HOST', 'redis://localhost'))
     event_token_filter = contract.events.Transfer.create_filter(fromBlock='latest')
     event_usdt_filter = usdt_contract.events.Transfer.create_filter(fromBlock='latest')
     loop = asyncio.get_event_loop()

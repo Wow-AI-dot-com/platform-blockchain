@@ -43,15 +43,18 @@ async def create_item_if_not_exist(item):
     existing_wallet = await app.mongodb['wallets'].find_one({"userId": item.userId})
     if existing_wallet is None:
         await app.mongodb['wallets'].insert_one(item.dict())
-        new_wallet = await app.mongodb['wallets'].find_one({"userId": item.userId})
-        new_wallet_list = await find_all_wallet()
-        for new_wallet in new_wallet_list:
-            if "_id" in new_wallet and isinstance(new_wallet["_id"], ObjectId):
-                new_wallet["_id"] = str(new_wallet["_id"])
-            if 'privateKey' in new_wallet:
-                del new_wallet['privateKey']
-        await app.r.set('saved_wallet', json.dumps(new_wallet_list))
-        return new_wallet
+        existing_wallet = await app.mongodb['wallets'].find_one({"userId": item.userId})
+    new_wallet_list = await find_all_wallet()
+    for new_wallet in new_wallet_list:
+        if "_id" in new_wallet and isinstance(new_wallet["_id"], ObjectId):
+            new_wallet["_id"] = str(new_wallet["_id"])
+        if 'privateKey' in new_wallet:
+            del new_wallet['privateKey']
+        if 'createdAt' in new_wallet:
+            del new_wallet['createdAt']
+        if 'updatedAt' in new_wallet:
+            del new_wallet['updatedAt']
+    await app.r.set('saved_wallet', json.dumps(new_wallet_list))
 
     return existing_wallet
 
@@ -134,7 +137,7 @@ async def update_transfer_request(query, update_fields):
         {"$set": update_fields},  # new values
     ) 
 
-async def register_rent_blockchain(builder_info,provider_info, rent_id, rate_per_hour, total_hours, data_url, deposit_amount):
+async def register_rent_blockchain(builder_info,provider_info, rent_id, rate_per_hour, total_hours, data_url, deposit_amount, rent):
     from main import app
     try:
         builder_address_checksum = app.w3.to_checksum_address(builder_info['walletAddress'])
@@ -152,10 +155,10 @@ async def register_rent_blockchain(builder_info,provider_info, rent_id, rate_per
 
         # # Send the transaction
         txn_hash = app.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-        print(txn_hash.hex())
 
         # # Wait for the transaction to be mined, and get the transaction receipt
         txn_receipt = app.w3.eth.wait_for_transaction_receipt(txn_hash)
+        await create_rent(rent)
         await update_rent({"rentId": rent_id}, {"isSubmitted": True, "transactionHash": txn_receipt.transactionHash.hex()})
         new_balance = Decimal(builder_info['balance']) - Decimal(deposit_amount)
         await update_wallet({"userId": builder_info['userId']},  {"balance": str(new_balance)} )
@@ -251,7 +254,7 @@ async def register_rent(builder_id: str, provider_id: str, data_url: str, rate_p
     builder_info = await get_one_by_user_id(builder_id)
     provider_info = await get_one_by_user_id(provider_id)
     if  provider_info is None or builder_info is None:
-        raise HTTPException(status_code=404, detail="Resource not found") 
+        raise HTTPException(status_code=404, detail="user not found") 
     else:
         existing_rent = await get_rent_by_id(rent_id)
         deposit_amount = Decimal(rate_per_hour) * Decimal(total_hours) * (Decimal(1) + Decimal(buffer_amount))
@@ -260,8 +263,7 @@ async def register_rent(builder_id: str, provider_id: str, data_url: str, rate_p
                 raise HTTPException(status_code=400, detail="Insufficient balance")
             rent = Rent(builderAddress=builder_info['walletAddress'], providerAddress=provider_info['walletAddress'], dataURL=data_url, rentId=rent_id, depositAmount=str(deposit_amount), ratePerHour=rate_per_hour,totalHoursDeposit=total_hours )
             
-            await create_rent(rent)
-            await register_rent_blockchain(builder_info, provider_info, rent_id, rate_per_hour, total_hours, data_url, deposit_amount)
+            await register_rent_blockchain(builder_info, provider_info, rent_id, rate_per_hour, total_hours, data_url, deposit_amount, rent)
         else: 
             raise HTTPException(status_code=403, detail="Already exists") 
         

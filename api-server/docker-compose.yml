@@ -1,0 +1,41 @@
+version: "3.8"
+
+services:
+  mongo:
+    image: mongo
+    restart: always
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin123
+      - MONGO_INITDB_DATABASE=mydatabase # The name of the database to be initialized
+    ports:
+      - 27018:27017
+    volumes:
+      - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+      - ./mongo:/data/db
+  cache:
+    image: redis:6.2-alpine
+    # restart: always
+    ports:
+      - "6378:6379"
+    command: redis-server
+    volumes:
+      - ./redis:/data
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ./entrypoint-api.sh
+    ports:
+      - 8000:8000
+    depends_on:
+      - mongo
+      - cache
+  event:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ./entrypoint-event-listener.sh
+    depends_on:
+      - mongo
+      - cache

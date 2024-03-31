@@ -27,26 +27,26 @@ class TransferStatus(Enum):
     
 def get_token_name(address):
     token_name = {
-        "0x963fef22f1e513248b70cff76ba76598a76ca827": "USDT",
-        "0x4e3d54b2391b81f44171a443e09e08e5a9eb778e": "WOW",
+        "0x4e3d54b2391b81f44171a443e09e08e5a9eb778e": "USDT",
+        "0x963fef22f1e513248b70cff76ba76598a76ca827": "WOW",
     }
     return token_name.get(address, "Unknown Token")
 
 def get_token_symbol(address):
     token_name = {
-        "0x963fef22f1e513248b70cff76ba76598a76ca827": "USDT",
-        "0x4e3d54b2391b81f44171a443e09e08e5a9eb778e": "WOW",
+        "0x4e3d54b2391b81f44171a443e09e08e5a9eb778e": "USDT",
+        "0x963fef22f1e513248b70cff76ba76598a76ca827": "WOW",
     }
     return token_name.get(address, "Unknown Token")
 
 def get_token_detail(address): # input params address is lower case
     token = {
-        "0x963fef22f1e513248b70cff76ba76598a76ca827": {
+        "0x4e3d54b2391b81f44171a443e09e08e5a9eb778e": {
             "name": "USDT",
             "symbol": "USDT",
             "decimals": 18,
         },
-        "0x4e3d54b2391b81f44171a443e09e08e5a9eb778e": {
+        "0x963fef22f1e513248b70cff76ba76598a76ca827": {
             "name": "WOW",
             "symbol": "WOW",
             "decimals": 18},
