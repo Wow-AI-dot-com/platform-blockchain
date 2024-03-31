@@ -1,0 +1,17 @@
+{
+  "extends": "solhint:recommended",
+  "rules": {
+    "compiler-version": ["error", "^0.8.0"],
+    "func-visibility": ["warn", { "ignoreConstructors": true }]
+  }
+}
+ "0x6d13fbe8d67a0fd3e68860b6b3e1912e67d330f4",
+"62d65a2f6199d8df6b7f9013",
+ "box",
+ "",
+"2984",
+ "0x09df26735213E31706E0599A5D9A8D0D1029e0CE",
+"10000000000",
+ "0xb15d8E736f6E0b7b2Dfe002f8861AD7C17f6Dbc3",
+ "b2b2f47d-52ec-4057-b027-265c37ac7bec",
+"0x37855245cd9947df25c1d98d266b168ff92ddc82bd30b416245d30a06abb7c835296a18c602db749b793f72e171b317b0c810e3f7a3977780f5a04c69892be6a1c"

@@ -1,0 +1,14 @@
+# Dependency directories
+node_modules
+
+# Lock and ENV files
+.env
+coverage
+coverage.json
+typechain
+package-lock.json
+
+# Hardhat files
+cache
+artifacts
+.openzeppelin
