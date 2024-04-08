@@ -21,7 +21,7 @@ r = None
 # Connect to Ethereum node
 
 # ABI and address of the contract
-token_address = os.getenv("TOKEN_CONTRACT_ADDRESS")  # Replace with your contract's address
+token_address = os.getenv("AXB_CONTRACT_ADDRESS")  # Replace with your contract's address
 usdt_address = os.getenv("USDT_CONTRACT_ADDRESS")  # replace with your contract address
 
 async def set_key(redis, key, value):

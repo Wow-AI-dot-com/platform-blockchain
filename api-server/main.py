@@ -1,32 +1,28 @@
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Response, Body, Depends, status, Request, HTTPException
 from web3 import Web3
 import os
 from dotenv import load_dotenv
-from pydantic import BaseModel, EmailStr
-from typing import Optional
+from pydantic import BaseModel, EmailStr, Field
+from typing import Optional, Callable
 from motor.motor_asyncio import AsyncIOMotorClient
 import secrets
 from eth_account import Account
 from model import Wallet  # assuming you have a Pydantic model named Item
-from service import create_item, create_item_if_not_exist, get_one_by_user_id, register_rent, encrypt_private_key, decrypt_private_key, end_rent, error_resource, withdraw_token_on_ramp, worker, withdraw_token_off_ramp , get_transfer_off_ramp_by_status, update_status, get_one_transfer_off_ramp_request, get_token_price, get_all_token # assuming you have a Pydantic model named Item
+from service import create_item_if_not_exist, get_one_by_user_id, register_rent, encrypt_private_key, worker_operator, end_rent, error_resource, withdraw_token_on_ramp, worker_transfer, withdraw_token_off_ramp , get_transfer_off_ramp_by_status, update_status, get_one_transfer_off_ramp_request, get_token_price, get_all_token # assuming you have a Pydantic model named Item
 from bson import ObjectId
 import aioredis
 import asyncio
-import pickle
 from web3.middleware import geth_poa_middleware
-from typing import List
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.backends import default_backend
 from utils import marketplace_abi, token_abi, TransferStatus, pancake_abi
-import threading
 from decimal import Decimal
 import base64
 import json
-import queue
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-import time
+import httpx
 
 load_dotenv()
 global app
@@ -34,15 +30,16 @@ app = FastAPI()
 
 mongo_host = os.getenv('MONGODB_HOST', 'mongodb://admin:admin123@localhost:27017/')
 redis_host = os.getenv('REDIS_HOST', 'redis://localhost')
+OAUTH_SERVER_URL = os.getenv('OAUTH_SERVER_URL', 'http://108.181.196.144:8080')
 
 # Setup Web3 connection
 app.w3 = Web3(Web3.HTTPProvider(os.getenv("WEB3_PROVIDER")))
-private_key = os.getenv("PRIVATE_KEY")
+private_key = os.getenv("PRIVATE_KEY_OPERATOR")
 app.account = Account.from_key(private_key)
 
 assert app.w3.is_connected()
 contract_address = os.getenv("MARKETPLACE_CONTRACT_ADDRESS")  # replace with your contract address
-token_address = os.getenv("TOKEN_CONTRACT_ADDRESS")  # replace with your contract address
+token_address = os.getenv("AXB_CONTRACT_ADDRESS")  # replace with your contract address
 pancake_v2_address = os.getenv("PANCAKE_V2_CONTRACT_ADDRESS")  # replace with your contract address
 
 app.marketplace_contract = app.w3.eth.contract(address=contract_address, abi=marketplace_abi)
@@ -78,44 +75,38 @@ class ResourceRegistrationModel(BaseModel):
     disk: int
     price_per_hour: float
     max_concurrent_sessions: int
-    
-class CreateWallet(BaseModel):
-    userId: str
-    
+
 class RegisterRentRequest(BaseModel):
-    builderId: str
     providerId: str
     dataURL: str
     ratePerHour: str
     totalHours: str
     rentId: str
+    rentId: str
+    startTime: str
     
 class EndRentRequest(BaseModel):
-    builderId: str
     providerId: str
     totalHours: str
     rentId: str
     
 class ErrorRequest(BaseModel):
-    builderId: str
     providerId: str
     rentId: str
     reason: str
     
 class WithdrawOnChainRequest(BaseModel):
-    userId: str
     amount: str
     walletAddress: str
 
 class WithdrawOffChainRequest(BaseModel):
-    userId: str
     amount: str
     country: str
     email: EmailStr
     
 class WalletResponse(BaseModel):
-    userId: str
     walletAddress: str
+    userId: str
     balance: str
     pendingBalance: str
 
@@ -167,10 +158,60 @@ async def startup_db_client():
     app.mongodb_client = AsyncIOMotorClient(mongo_host)
     app.mongodb = app.mongodb_client['wow']
     app.r = await aioredis.from_url(redis_host)
-    app.queue = asyncio.Queue()
+    app.queue_transfer = asyncio.Queue()
+    app.queue_operator = asyncio.Queue()
+    asyncio.create_task(worker_transfer())
+    asyncio.create_task(worker_operator())
     scheduler.start()
+
+class TokenData(BaseModel):
+    username: str
+    authCode: str
+    grantType: str
+    scope: Optional[str]
+
+WHITELISTED_ROUTES = ["/api/price", "/docs", "/openapi.json"]
+
+
+async def get_user_id_from_token(request: Request, call_next: Callable):
+    if request.url.path not in WHITELISTED_ROUTES:
+        try:
+            authorization: str = request.headers.get('Authorization')
+            if not authorization:
+                raise HTTPException(status_code=403, detail="No Authorization header provided")
+            
+            token = authorization.split(" ")[1]
+            url = f"{OAUTH_SERVER_URL}/api/user/info"
+            headers = {"Authorization": f"Token {token}"}
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.post(url, headers=headers)
+            
+            if response.status_code != 200:
+                raise HTTPException(status_code=403, detail="Token validation failed")
+            
+            user_id = response.json().get('data').get('id')
+            if not user_id:
+                raise HTTPException(status_code=403, detail="User ID not found")
+            request.state.user_id = user_id
+            
+        except HTTPException as e:
+            return Response(content=json.dumps({"detail": e.detail}), status_code=e.status_code, media_type='application/json')
+    response = await call_next(request)
+    return response
+
+app.middleware("http")(get_user_id_from_token)
+
+class TokenData(BaseModel):
+    grantType: str
+    username: str
+    authCode: str
+    scope: str = ""
+    refresh_token: Optional[str] = None
+    userId: str = Field(..., description="User ID")
     
-@app.get("/price")
+   
+@app.get("/api/price")
 async def get_token_price_data():
     token_list = await get_all_token({})
     
@@ -189,14 +230,15 @@ async def get_token_price_data():
 
     return { "data": token_list_response }
 
-@app.post("/wallet")
-async def register_resource(resource: CreateWallet):
+@app.post("/api/wallet")
+async def register_resource(request: Request):
+    current_user_id = str(request.state.user_id)
     priv = secrets.token_hex(32)
     private_key = "0x" + priv
     account = Account.from_key(private_key)
     print(private_key)
     hash_private_key = encrypt_private_key(private_key)
-    wallet = Wallet(userId=resource.userId, walletAddress=account.address.lower(), privateKey=hash_private_key)
+    wallet = Wallet(userId=str(current_user_id), walletAddress=account.address.lower(), privateKey=hash_private_key)
     save_wallet = await create_item_if_not_exist(wallet)
         
     wallet_response = WalletResponse(
@@ -208,11 +250,11 @@ async def register_resource(resource: CreateWallet):
 
     return { "data": wallet_response }
 
-@app.get("/wallet/{user_id}")
-async def get_resource(user_id: str):
-    # Assuming `db` is your database object and `get_resource` is a function that retrieves a resource by its ID
-    wallet = await get_one_by_user_id(user_id)
-    if Wallet is None:
+@app.get("/api/wallet/me")
+async def get_resource(request: Request):
+    current_user_id = str(request.state.user_id)
+    wallet = await get_one_by_user_id(current_user_id)
+    if wallet is None:
         raise HTTPException(status_code=404, detail="User not found")
     
     response_wallet = WalletResponse(
@@ -223,27 +265,29 @@ async def get_resource(user_id: str):
     )
     return { "data": response_wallet }
 
-@app.post("/resource/rent")
-async def rent_resource(body: RegisterRentRequest):
-    await register_rent(body.builderId, body.providerId, body.dataURL, body.ratePerHour, body.totalHours, body.rentId)
+@app.post("/api/resource/rent")
+async def rent_resource(body: RegisterRentRequest, request: Request):
+    current_user_id = str(request.state.user_id)
+    await register_rent(current_user_id, body.providerId, body.dataURL, body.ratePerHour, body.totalHours, body.rentId)
     return {"message": "Rent success"}
 
-@app.post("/resource/end")
-async def finish_rent_resource(body: EndRentRequest):
-    await end_rent(body.builderId, body.providerId, body.totalHours, body.rentId)
+@app.post("/api/resource/end")
+async def finish_rent_resource(body: EndRentRequest, request: Request):
+    current_user_id = str(request.state.user_id)
+    await end_rent(current_user_id, body.providerId, body.totalHours, body.rentId)
     return {"message": "End rent success"}
 
-@app.post("/resource/error")
-async def finish_error_resource(body: ErrorRequest):
-    await error_resource(body.builderId, body.providerId, body.rentId, body.reason)
+@app.post("/api/resource/error")
+async def finish_error_resource(body: ErrorRequest, request: Request):
+    current_user_id = str(request.state.user_id)
+    await error_resource(current_user_id, body.providerId, body.rentId, body.reason)
     return {"message": "End rent success"}
 
 def is_valid_address(address: str) -> bool:
     return Web3.is_address(address)
 
-@app.get("/withdraw/off-ramp")
-async def get_off_ramp_request(status: Optional[str] = None, userId: Optional[str] = None):
-    # await withdraw_token_off_ramp(body.userId, body.amount, body.email, body.country)
+@app.get("/api/withdraw/off-ramp")
+async def get_off_ramp_request(request: Request, status: Optional[str] = None, userId: Optional[str] = None):
     query = {}
     if status is not None:   
         if status.lower() == str(TransferStatus.SUCCESS.value).lower():
@@ -267,7 +311,7 @@ async def get_off_ramp_request(status: Optional[str] = None, userId: Optional[st
     return {"data": transaction_requests}
 
 
-@app.get("/withdraw/off-ramp/{id}")
+@app.get("/api/withdraw/off-ramp/{id}")
 async def get_off_ramp_request_by_id(id: str):
     
 
@@ -275,27 +319,29 @@ async def get_off_ramp_request_by_id(id: str):
     
     return {"data": transaction_request}
 
-@app.post("/withdraw/on-ramp")
-async def withdraw_token_request(body: WithdrawOnChainRequest):
+@app.post("/api/withdraw/on-ramp")
+async def withdraw_token_request(body: WithdrawOnChainRequest, request: Request):
+    current_user_id = str(request.state.user_id)
     if not is_valid_address(body.walletAddress):
         raise HTTPException(status_code=400, detail="Invalid wallet address")
-    await withdraw_token_on_ramp(body.userId, body.amount, app.w3.to_checksum_address(body.walletAddress))
+    await withdraw_token_on_ramp(current_user_id, body.amount, app.w3.to_checksum_address(body.walletAddress))
     return {"message": "Create on ramp request success"}
 
-@app.post("/withdraw/off-ramp")
-async def withdraw_token_off_ramp_request(body: WithdrawOffChainRequest):
-    await withdraw_token_off_ramp(body.userId, body.amount, body.email, body.country)
+@app.post("/api/withdraw/off-ramp")
+async def withdraw_token_off_ramp_request(body: WithdrawOffChainRequest, request: Request):
+    current_user_id = str(request.state.user_id)
+    await withdraw_token_off_ramp(current_user_id, body.amount, body.email, body.country)
     return {"message": "Create off ramp request success"}
 
-@app.put("/withdraw/off-ramp/completed/{id}")
-async def completed_transfer_request(id: str):
+@app.put("/api/withdraw/off-ramp/completed/{id}")
+async def completed_transfer_request(id: str, request: Request):
     print(id)
     await update_status(id, TransferStatus.SUCCESS.value)
     
     return {"message": "Complete transfer request success"}
 
-@app.put("/withdraw/off-ramp/reject/{id}")
-async def reject_transfer_request(id: str):
+@app.put("/api/withdraw/off-ramp/reject/{id}")
+async def reject_transfer_request(id: str, request: Request):
     print(id)
     await update_status(id, TransferStatus.REJECT.value)
     

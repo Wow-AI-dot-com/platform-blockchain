@@ -47,9 +47,10 @@ def get_token_detail(address): # input params address is lower case
             "decimals": 18,
         },
         "0x963fef22f1e513248b70cff76ba76598a76ca827": {
-            "name": "WOW",
-            "symbol": "WOW",
-            "decimals": 18},
+            "name": "AxB",
+            "symbol": "AxB",
+            "decimals": 18
+        },
     }
     return token.get(address, {})
 

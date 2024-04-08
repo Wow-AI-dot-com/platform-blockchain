@@ -18,7 +18,8 @@ import os
 load_dotenv()
 
 usdt_address = os.getenv("USDT_CONTRACT_ADDRESS")  # replace with your contract address
-token_address = os.getenv("TOKEN_CONTRACT_ADDRESS")  # replace with your contract address
+token_address = os.getenv("AXB_CONTRACT_ADDRESS")  # replace with your contract address
+chain_id = int(os.getenv("CHAIN_ID", 97))
 
 async def create_item(item):
     from main import app
@@ -137,7 +138,7 @@ async def update_transfer_request(query, update_fields):
         {"$set": update_fields},  # new values
     ) 
 
-async def register_rent_blockchain(builder_info,provider_info, rent_id, rate_per_hour, total_hours, data_url, deposit_amount, rent):
+async def register_rent_blockchain(builder_info,provider_info, rent_id, rate_per_hour, total_hours, data_url, deposit_amount):
     from main import app
     try:
         builder_address_checksum = app.w3.to_checksum_address(builder_info['walletAddress'])
@@ -146,7 +147,7 @@ async def register_rent_blockchain(builder_info,provider_info, rent_id, rate_per
         
         gas_estimate = contract_function.estimate_gas()
         transaction = contract_function.build_transaction({
-            'chainId': 97,  # This is the mainnet chain ID, replace with your network chain ID
+            'chainId':chain_id,  # This is the mainnet chain ID, replace with your network chain ID
             'gas': gas_estimate,
             'nonce': app.w3.eth.get_transaction_count(app.account.address),
         })
@@ -158,8 +159,9 @@ async def register_rent_blockchain(builder_info,provider_info, rent_id, rate_per
 
         # # Wait for the transaction to be mined, and get the transaction receipt
         txn_receipt = app.w3.eth.wait_for_transaction_receipt(txn_hash)
+        rent = Rent(builderAddress=builder_info['walletAddress'], providerAddress=provider_info['walletAddress'], dataURL=data_url, rentId=rent_id, depositAmount=str(deposit_amount), ratePerHour=rate_per_hour,totalHoursDeposit=total_hours, isSubmitted = True, transactionHash= txn_receipt.transactionHash.hex() )
+
         await create_rent(rent)
-        await update_rent({"rentId": rent_id}, {"isSubmitted": True, "transactionHash": txn_receipt.transactionHash.hex()})
         new_balance = Decimal(builder_info['balance']) - Decimal(deposit_amount)
         await update_wallet({"userId": builder_info['userId']},  {"balance": str(new_balance)} )
         return txn_receipt.transactionHash.hex()
@@ -178,7 +180,7 @@ async def end_rent_blockchain(builder_info, provider_info, rent_info, total_hour
         
         gas_estimate = contract_function.estimate_gas()
         transaction = contract_function.build_transaction({
-            'chainId': 97,  # This is the mainnet chain ID, replace with your network chain ID
+            'chainId':chain_id,  # This is the mainnet chain ID, replace with your network chain ID
             'gas': gas_estimate,
             'nonce': app.w3.eth.get_transaction_count(app.account.address),
         })
@@ -190,6 +192,7 @@ async def end_rent_blockchain(builder_info, provider_info, rent_info, total_hour
 
         # # Wait for the transaction to be mined, and get the transaction receipt
         txn_receipt = app.w3.eth.wait_for_transaction_receipt(txn_hash)
+        print(txn_receipt.transactionHash.hex())
         await update_rent({"rentId": rent_info['rentId']}, {"isCompleted": True, "transactionHashCompleted": txn_receipt.transactionHash.hex(), "totalHoursUse": total_hours, "endedAt": datetime.now()})
         pay_amount = Decimal(rent_info['ratePerHour']) * Decimal(total_hours)
         new_balance_provider = Decimal(provider_info['balance']) + Decimal(pay_amount)
@@ -219,7 +222,7 @@ async def error_resource_blockchain(builder_info, rent_info, reason):
         
         gas_estimate = contract_function.estimate_gas()
         transaction = contract_function.build_transaction({
-            'chainId': 97,  # This is the mainnet chain ID, replace with your network chain ID
+            'chainId':chain_id,  # This is the mainnet chain ID, replace with your network chain ID
             'gas': gas_estimate,
             'nonce': app.w3.eth.get_transaction_count(app.account.address),
         })
@@ -249,7 +252,7 @@ async def error_resource_blockchain(builder_info, rent_info, reason):
             raise HTTPException(status_code=400, detail=error_message) 
 
 async def register_rent(builder_id: str, provider_id: str, data_url: str, rate_per_hour: str, total_hours: str , rent_id: str):
-    print(builder_id,provider_id )
+    from main import app
     
     builder_info = await get_one_by_user_id(builder_id)
     provider_info = await get_one_by_user_id(provider_id)
@@ -261,13 +264,24 @@ async def register_rent(builder_id: str, provider_id: str, data_url: str, rate_p
         if existing_rent is None: 
             if Decimal(builder_info['balance']) < Decimal(deposit_amount):
                 raise HTTPException(status_code=400, detail="Insufficient balance")
-            rent = Rent(builderAddress=builder_info['walletAddress'], providerAddress=provider_info['walletAddress'], dataURL=data_url, rentId=rent_id, depositAmount=str(deposit_amount), ratePerHour=rate_per_hour,totalHoursDeposit=total_hours )
-            
-            await register_rent_blockchain(builder_info, provider_info, rent_id, rate_per_hour, total_hours, data_url, deposit_amount, rent)
+            builder_info['_id'] = str(builder_info['_id'])
+            provider_info['_id'] = str(provider_info['_id'])
+            del builder_info['createdAt']
+            del builder_info['privateKey']
+            del provider_info['privateKey']
+            del builder_info['updatedAt']
+            del provider_info['createdAt']
+            del provider_info['updatedAt']
+                
+            task = json.dumps({'type': "register_rent", 'rent_info': {'builder_info': builder_info, 'provider_info': provider_info, 'rent_id': rent_id, 'rate_per_hour': rate_per_hour, 'total_hours': total_hours, 'data_url': data_url, 'deposit_amount': str(deposit_amount)}})
+            await app.queue_operator.put(task)
+            # await register_rent_blockchain(builder_info, provider_info, rent_id, rate_per_hour, total_hours, data_url, deposit_amount)
         else: 
             raise HTTPException(status_code=403, detail="Already exists") 
+       
         
 async def end_rent(builder_id: str, provider_id: str, total_hours: str, rent_id: str):
+    from main import app
     builder_info = await get_one_by_user_id(builder_id)
     provider_info = await get_one_by_user_id(provider_id)
     if  provider_info is None or builder_info is None:
@@ -281,7 +295,20 @@ async def end_rent(builder_id: str, provider_id: str, total_hours: str, rent_id:
         elif existing_rent is not None and existing_rent['isErrored'] == True: 
             raise HTTPException(status_code=400, detail="Resource removed")
         else :             
-            await end_rent_blockchain(builder_info, provider_info, existing_rent, total_hours)
+            builder_info['_id'] = str(builder_info['_id'])
+            provider_info['_id'] = str(provider_info['_id'])
+            existing_rent['_id'] = str(existing_rent['_id'])
+            del builder_info['createdAt']
+            del builder_info['privateKey']
+            del provider_info['privateKey']
+            del builder_info['updatedAt']
+            del provider_info['createdAt']
+            del provider_info['updatedAt']
+            del existing_rent['updatedAt']
+            del existing_rent['createdAt']
+            task = json.dumps({'type': "end_rent", 'end_rent_info': {'builder_info': builder_info, 'provider_info': provider_info, 'existing_rent': existing_rent, 'total_hours': total_hours}})
+            await app.queue_operator.put(task)
+            
             
 async def error_resource(builder_id: str, provider_id: str, rent_id: str, reason: str):
     builder_info = await get_one_by_user_id(builder_id)
@@ -298,7 +325,27 @@ async def error_resource(builder_id: str, provider_id: str, rent_id: str, reason
             raise HTTPException(status_code=400, detail="Resource removed")
         elif existing_rent is not None and existing_rent['isCompleted'] == False:             
             await error_resource_blockchain(builder_info, existing_rent, reason)
+
+async def worker_operator():
+    from main import app
+    while True:
+        # Wait for a task from the queue_transfer
+        task = await app.queue_operator.get()
+        # Process the task
+        task_data = json.loads(task)
+        print(f'Processing task: {task_data}')
+        
+        if(task_data['type'] == "register_rent"):
+            rent_info = task_data['rent_info']
+            await register_rent_blockchain(rent_info["builder_info"], rent_info['provider_info'], rent_info['rent_id'], rent_info['rate_per_hour'], rent_info['total_hours'], rent_info['data_url'], rent_info['deposit_amount'])
+        elif(task_data['type'] == "end_rent"):
+            end_rent_info = task_data['end_rent_info']
+            await end_rent_blockchain(end_rent_info['builder_info'], end_rent_info['provider_info'], end_rent_info['existing_rent'], end_rent_info['total_hours'])
             
+        # Mark the task as done
+        
+        app.queue_operator.task_done()
+          
 def encrypt_private_key(private_key: str):
     from main import app
     return app.cipher_suite.encrypt(private_key.encode())
@@ -329,14 +376,20 @@ async def withdraw_token_on_ramp(user_id: str, amount: str, wallet_address: str)
         existing_wallet = await get_one_by_user_id(user_id)
         if "_id" in existing_wallet and isinstance(existing_wallet["_id"], ObjectId):
             existing_wallet["_id"] = str(existing_wallet["_id"])
+        if 'privateKey' in existing_wallet:
+            del existing_wallet['privateKey']
+        if 'createdAt' in existing_wallet:
+            del existing_wallet['createdAt']
+        if 'updatedAt' in existing_wallet:
+            del existing_wallet['updatedAt']
         task = json.dumps({'existing_wallet': existing_wallet, 'amount': amount, 'wallet_address': wallet_address})
-        await app.queue.put(task)
+        await app.queue_transfer.put(task)
 
-async def worker():
+async def worker_transfer():
     from main import app
     while True:
-        # Wait for a task from the queue
-        task = await app.queue.get()
+        # Wait for a task from the queue_transfer
+        task = await app.queue_transfer.get()
         # Process the task
         print(f'Processing task: {task}')
         task_data = json.loads(task)
@@ -360,7 +413,7 @@ async def worker():
                     'from': app.account.address
                 })
                 transaction = contract_function.build_transaction({
-                    'chainId': 97,  # This is the mainnet chain ID, replace with your network chain ID
+                    'chainId': chain_id,  # This is the mainnet chain ID, replace with your network chain ID
                     'gas': gas_estimate,
                     'nonce': app.w3.eth.get_transaction_count(app.account.address),
                 })
@@ -380,7 +433,7 @@ async def worker():
             except Exception as e:
                 print('Failed to transfer:',e)
                 
-        app.queue.task_done()
+        app.queue_transfer.task_done()
         
 async def withdraw_token_off_ramp(user_id, amount, email, country):
     from main import app
@@ -422,7 +475,8 @@ async def get_token_price():
             token = Token(address=str(token_address).lower(), amountPerDollar=str(parse_to_decimal), name=name, symbol=symbol, decimal= decimal)
             await create_token(token)
         else:
+            print('update')
             await update_token({"address": str(token_address).lower()}, {"amountPerDollar": str(parse_to_decimal)})
         
     except Exception as e:
-        print('Failed to transfer:',e)
+        print('Failed to get price:',e)
