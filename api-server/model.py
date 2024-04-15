@@ -1,7 +1,8 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Json
+from typing import Optional, List
 from datetime import datetime
 from typing import List
+from utils import RentStatus
 
 class Wallet(BaseModel):
     userId: str
@@ -12,6 +13,7 @@ class Wallet(BaseModel):
     hasApproved: bool = False
     createdAt: datetime = datetime.now()
     updatedAt: datetime = datetime.now()
+    lastDeposited: datetime = None
     def update(self, **kwargs):
         for field, value in kwargs.items():
             setattr(self, field, value)
@@ -68,26 +70,27 @@ class TransferRequestOffRamp(BaseModel):
 class Rent(BaseModel):
     builderAddress: str
     providerAddress: str
-    dataURL: str
+    ipfsHash: str
     rentId: str
-    depositAmount: str
-    ratePerHour: str
-    totalHoursDeposit: str
+    isProcess: bool = False
+    depositAmountAxB: str
+    rateDollarPerHour: str
+    totalHoursEstimate: str
+    axbPaidPerSecond: str
     totalHoursUse: str = '0'
-    payAmount: Optional[str] = None
+    paidAmount: Optional[str] = '0'
     transactionHash: Optional[str] = None
     transactionHashCompleted: Optional[str] = None
     transactionHashError: Optional[str] = None
-    endedAt: Optional[datetime] = None
-    isCompleted: bool = False
-    isErrored: bool = False
-    isSubmitted: bool = False
+    reasonError: Optional[str] = None
+    errorMessage: Optional[str] = None
+    endedAt: str = None
+    startedAt: str
+    status: str = RentStatus.PENDING.value
+    fee: Json = {}
+    lastPaid: List[int] = []
     createdAt: datetime = datetime.now()
     updatedAt: datetime = datetime.now()
-    def update(self, **kwargs):
-        for field, value in kwargs.items():
-            setattr(self, field, value)
-        self.updatedAt = datetime.now()
         
 class Token(BaseModel):
     address: str
@@ -95,6 +98,15 @@ class Token(BaseModel):
     symbol: str
     decimal: int
     amountPerDollar: str
+    priceInDollar: str
+    createdAt: datetime = datetime.now()
+    updatedAt: datetime = datetime.now()
+    
+class Fee(BaseModel):
+    name: str
+    gasFeeInDollar: str
+    gasFeeInAxB: str
+    gasFeeInBNB: str
     createdAt: datetime = datetime.now()
     updatedAt: datetime = datetime.now()
     

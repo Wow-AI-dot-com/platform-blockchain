@@ -11,43 +11,44 @@ contract Marketplace is OwnableUpgradeable, PausableUpgradeable {
     struct RentStruct {
         address builder;
         address provider;
-        uint256 startedAt;
-        uint256 endedAt;
         bool isCompleted;
         bool isErrored;
-        string ratePerHour;
-        string totalHours;
-        string rentURI;
+        uint64 startedAt;
+        uint64 endedAt;
+        uint64 totalTimesEstimate;
+        uint64 totalTimesInUse;
+        string rateDollarPerHour;
+        string ipfsHash;
         string endReason;
     }
 
     mapping(string => RentStruct) public _rentData;
 
     event RegisterRentEvent(
+        string indexed id,
         address builder,
         address provider,
-        uint256 startedAt,
-        string ratePerHour,
-        string totalHours,
-        string id,
+        uint64 startedAt,
+        uint64 totalTimesEstimate,
+        string rateDollarPerHour,
         string rentURI
     );
 
     event EndRentEvent(
+        string indexed id,
         address builder,
         address provider,
-        uint256 endedAt,
+        uint64 endedAt,
+        uint64 totalTimesInUse,
         string ratePerHour,
-        string totalHours,
-        string id,
         string endReason
     );
 
     event ResourceErrorEvent(
+        string indexed id,
         address builder,
         address provider,
-        uint256 endedAt,
-        string id,
+        uint64 endedAt,
         string endReason
     );
 
@@ -60,9 +61,10 @@ contract Marketplace is OwnableUpgradeable, PausableUpgradeable {
         string memory _id,
         address _builder,
         address _provider,
-        string memory _ratePerHour,
-        string memory _totalHours,
-        string memory _rentURI
+        uint64 _startedAt,
+        uint64 _totalTimeEstimate,
+        string memory _rateDollarPerHour,
+        string memory _ipfsHash
     ) public {
         require(
             _builder != address(0) && _provider != address(0),
@@ -76,28 +78,81 @@ contract Marketplace is OwnableUpgradeable, PausableUpgradeable {
         _rentData[_id] = RentStruct(
             _builder,
             _provider,
-            block.timestamp,
+            false,
+            false,
+            _startedAt,
             0,
-            false,
-            false,
-            _ratePerHour,
-            _totalHours,
-            _rentURI,
+            _totalTimeEstimate,
+            0,
+            _rateDollarPerHour,
+            _ipfsHash,
             ""
         );
 
         emit RegisterRentEvent(
+            _id,
             _builder,
             _provider,
-            block.timestamp,
-            _ratePerHour,
-            _totalHours,
-            _id,
-            _rentURI
+            _startedAt,
+            _totalTimeEstimate,
+            _rateDollarPerHour,
+            _ipfsHash
         );
     }
 
-    function finishRent(string memory _id, string memory _totalHours) public {
+    function multiRegisterRent(
+        string[] memory _ids,
+        address _builder,
+        address[] memory _providers,
+        uint64[] memory _startedAt,
+        uint64[] memory _totalTimeEstimate,
+        string[] memory _rateDollarPerHour,
+        string[] memory _ipfsHash
+    ) public {
+        uint256 length = _ids.length;
+        require(
+            _providers.length == length &&
+                _startedAt.length == length &&
+                _totalTimeEstimate.length == length &&
+                _rateDollarPerHour.length == length &&
+                _ipfsHash.length == length,
+            "All arrays must have the same length"
+        );
+
+        require(_builder != address(0), "Not address 0");
+        for (uint i = 0; i < _ids.length; i++) {
+            require(
+                _rentData[_ids[i]].builder == address(0) ||
+                    _rentData[_ids[i]].provider == address(0),
+                "Already registered"
+            );
+            _rentData[_ids[i]] = RentStruct(
+                _builder,
+                _providers[i],
+                false,
+                false,
+                _startedAt[i],
+                0,
+                _totalTimeEstimate[i],
+                0,
+                _rateDollarPerHour[i],
+                _ipfsHash[i],
+                ""
+            );
+
+            emit RegisterRentEvent(
+                _ids[i],
+                _builder,
+                _providers[i],
+                _startedAt[i],
+                _totalTimeEstimate[i],
+                _rateDollarPerHour[i],
+                _ipfsHash[i]
+            );
+        }
+    }
+
+    function finishRent(string memory _id, uint64 _endedAt) public {
         require(
             _rentData[_id].builder != address(0) &&
                 _rentData[_id].provider != address(0),
@@ -107,17 +162,17 @@ contract Marketplace is OwnableUpgradeable, PausableUpgradeable {
         require(_rentData[_id].isErrored == false, "Already stop");
 
         _rentData[_id].isCompleted = true;
-        _rentData[_id].endedAt = block.timestamp;
+        _rentData[_id].endedAt = _endedAt;
         _rentData[_id].endReason = "End rent resource";
-        _rentData[_id].totalHours = _totalHours;
+        _rentData[_id].totalTimesInUse = _endedAt - _rentData[_id].startedAt;
 
         emit EndRentEvent(
+            _id,
             _rentData[_id].builder,
             _rentData[_id].provider,
-            block.timestamp,
-            _rentData[_id].ratePerHour,
-            _totalHours,
-            _id,
+            _endedAt,
+            _rentData[_id].totalTimesInUse,
+            _rentData[_id].rateDollarPerHour,
             "End rent resource"
         );
     }
@@ -132,15 +187,15 @@ contract Marketplace is OwnableUpgradeable, PausableUpgradeable {
         require(_rentData[_id].isErrored == false, "Already stop");
 
         _rentData[_id].isErrored = true;
-        _rentData[_id].endedAt = block.timestamp;
+        _rentData[_id].endedAt = uint64(block.timestamp);
         _rentData[_id].endReason = reason;
-        _rentData[_id].totalHours = "0";
+        _rentData[_id].totalTimesInUse = 0;
 
         emit ResourceErrorEvent(
+            _id,
             _rentData[_id].builder,
             _rentData[_id].provider,
-            block.timestamp,
-            _id,
+            uint64(block.timestamp),
             reason
         );
     }

@@ -2,13 +2,13 @@ from fastapi import FastAPI, HTTPException, Response, Body, Depends, status, Req
 from web3 import Web3
 import os
 from dotenv import load_dotenv
-from pydantic import BaseModel, EmailStr, Field
-from typing import Optional, Callable
+from pydantic import BaseModel, EmailStr, Field, Json
+from typing import Optional, Callable, Dict, Any, List
 from motor.motor_asyncio import AsyncIOMotorClient
 import secrets
 from eth_account import Account
 from model import Wallet  # assuming you have a Pydantic model named Item
-from service import create_item_if_not_exist, get_one_by_user_id, register_rent, encrypt_private_key, worker_operator, end_rent, error_resource, withdraw_token_on_ramp, worker_transfer, withdraw_token_off_ramp , get_transfer_off_ramp_by_status, update_status, get_one_transfer_off_ramp_request, get_token_price, get_all_token # assuming you have a Pydantic model named Item
+from service import create_item_if_not_exist, get_one_by_user_id, register_rent, encrypt_private_key, worker_operator, end_rent, error_resource, withdraw_token_on_ramp, worker_transfer, withdraw_token_off_ramp , get_transfer_off_ramp_by_status, update_status, get_one_transfer_off_ramp_request, get_token_price, get_all_token, get_resource_rent_price, update_balance_job, get_all_rent
 from bson import ObjectId
 import aioredis
 import asyncio
@@ -77,21 +77,22 @@ class ResourceRegistrationModel(BaseModel):
     max_concurrent_sessions: int
 
 class RegisterRentRequest(BaseModel):
-    providerId: str
-    dataURL: str
-    ratePerHour: str
+    providerId: List[str]
+    resourceInfo: List[Dict[str, Any]]
+    rateDollarPerHour: List[str]
+    totalHoursEstimate: List[str]
+    rentId: List[str]
+    startedAt: List[str]
+    
+class ResourceRentPriceRequest(BaseModel):
+    rateDollarPerHour: str
     totalHours: str
-    rentId: str
-    rentId: str
-    startTime: str
     
 class EndRentRequest(BaseModel):
-    providerId: str
-    totalHours: str
+    endedAt: str
     rentId: str
     
 class ErrorRequest(BaseModel):
-    providerId: str
     rentId: str
     reason: str
     
@@ -109,8 +110,24 @@ class WalletResponse(BaseModel):
     userId: str
     balance: str
     pendingBalance: str
-
-
+    
+class RentResponse(BaseModel):
+    rentId: str
+    builderAddress: str
+    providerAddress: str
+    ipfsHash: str
+    depositAmountAxB: str
+    rateDollarPerHour: str
+    totalHoursEstimate: str
+    totalHoursUse: str
+    paidAmount: str
+    transactionHash: str
+    transactionHashCompleted: Optional[str] = Field(None, alias="transactionHashCompleted")
+    transactionHashError: Optional[str] = Field(None, alias="transactionHashError")
+    startedAt: str
+    status: str
+    fee: Dict = Field(..., alias="fee")
+    
 class TokenResponse(BaseModel):
     address: str
     name: str
@@ -151,6 +168,7 @@ async def token_price_job():
     await get_token_price()
 
 scheduler.add_job(token_price_job, 'interval', minutes=1)
+scheduler.add_job(update_balance_job, 'interval', minutes=1)
 
 
 @app.on_event("startup")
@@ -170,30 +188,31 @@ class TokenData(BaseModel):
     grantType: str
     scope: Optional[str]
 
-WHITELISTED_ROUTES = ["/api/price", "/docs", "/openapi.json"]
+WHITELISTED_ROUTES = ["/api/price"]
 
 
 async def get_user_id_from_token(request: Request, call_next: Callable):
     if request.url.path not in WHITELISTED_ROUTES:
         try:
-            authorization: str = request.headers.get('Authorization')
-            if not authorization:
-                raise HTTPException(status_code=403, detail="No Authorization header provided")
+            # authorization: str = request.headers.get('Authorization')
+            # if not authorization:
+            #     raise HTTPException(status_code=403, detail="No Authorization header provided")
             
-            token = authorization.split(" ")[1]
-            url = f"{OAUTH_SERVER_URL}/api/user/info"
-            headers = {"Authorization": f"Token {token}"}
+            # token = authorization.split(" ")[1]
+            # url = f"{OAUTH_SERVER_URL}/api/user/info"
+            # headers = {"Authorization": f"Token {token}"}
             
-            async with httpx.AsyncClient() as client:
-                response = await client.post(url, headers=headers)
+            # async with httpx.AsyncClient() as client:
+            #     response = await client.post(url, headers=headers)
             
-            if response.status_code != 200:
-                raise HTTPException(status_code=403, detail="Token validation failed")
+            # if response.status_code != 200:
+            #     raise HTTPException(status_code=403, detail="Token validation failed")
             
-            user_id = response.json().get('data').get('id')
-            if not user_id:
-                raise HTTPException(status_code=403, detail="User ID not found")
-            request.state.user_id = user_id
+            # user_id = response.json().get('data').get('id')
+            # if not user_id:
+            #     raise HTTPException(status_code=403, detail="User ID not found")
+            # request.state.user_id = user_id
+            request.state.user_id = 1
             
         except HTTPException as e:
             return Response(content=json.dumps({"detail": e.detail}), status_code=e.status_code, media_type='application/json')
@@ -209,8 +228,7 @@ class TokenData(BaseModel):
     scope: str = ""
     refresh_token: Optional[str] = None
     userId: str = Field(..., description="User ID")
-    
-   
+
 @app.get("/api/price")
 async def get_token_price_data():
     token_list = await get_all_token({})
@@ -265,22 +283,53 @@ async def get_resource(request: Request):
     )
     return { "data": response_wallet }
 
+@app.post("/api/resource/price")
+async def rent_resource(body: ResourceRentPriceRequest):
+    # current_user_id = str(request.state.user_id)
+    response = await get_resource_rent_price(body.rateDollarPerHour, body.totalHours)
+    return response
+
+def has_duplicates(request: RegisterRentRequest) -> bool:
+    for field, value in request.dict().items():
+        if field == 'rentId':
+            if len(value) != len(set(value)):
+                return True
+    return False
+
+def check_length(request: RegisterRentRequest) -> bool:
+    lengths = [len(value) for value in request.dict().values() if len(value) != 0]
+    return len(set(lengths)) == 1
+
 @app.post("/api/resource/rent")
 async def rent_resource(body: RegisterRentRequest, request: Request):
+    if has_duplicates(body):
+        raise HTTPException(status_code=400, detail="Duplicate rentId found in request")
+    if check_length(body) == False:
+        raise HTTPException(status_code=400, detail="Invalid array length")
     current_user_id = str(request.state.user_id)
-    await register_rent(current_user_id, body.providerId, body.dataURL, body.ratePerHour, body.totalHours, body.rentId)
-    return {"message": "Rent success"}
+    response = await register_rent(current_user_id, body.providerId, body.resourceInfo, body.rateDollarPerHour, body.totalHoursEstimate, body.rentId, body.startedAt)
+    return {"message": "Create Rent request success", "data": response}
+
+
+@app.get("/api/resource/rent/me")
+async def get_rent_by_user(request: Request):
+    # current_user_id = str(request.state.user_id)
+    current_user_id = '1' 
+    user = await get_one_by_user_id(current_user_id)  
+    rent_list = await get_all_rent({"builderAddress": user['walletAddress']})
+    rent_responses = [RentResponse(**rent) for rent in rent_list]
+    return {"data": rent_responses}
 
 @app.post("/api/resource/end")
 async def finish_rent_resource(body: EndRentRequest, request: Request):
     current_user_id = str(request.state.user_id)
-    await end_rent(current_user_id, body.providerId, body.totalHours, body.rentId)
+    await end_rent(current_user_id, body.endedAt, body.rentId)
     return {"message": "End rent success"}
 
 @app.post("/api/resource/error")
 async def finish_error_resource(body: ErrorRequest, request: Request):
     current_user_id = str(request.state.user_id)
-    await error_resource(current_user_id, body.providerId, body.rentId, body.reason)
+    await error_resource(current_user_id, body.rentId, body.reason)
     return {"message": "End rent success"}
 
 def is_valid_address(address: str) -> bool:
@@ -313,8 +362,6 @@ async def get_off_ramp_request(request: Request, status: Optional[str] = None, u
 
 @app.get("/api/withdraw/off-ramp/{id}")
 async def get_off_ramp_request_by_id(id: str):
-    
-
     transaction_request = await get_one_transfer_off_ramp_request({"_id": ObjectId(id)})
     
     return {"data": transaction_request}

@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 import os
 import aioredis
 from bson import ObjectId
-
+from datetime import datetime
 from utils import token_abi, get_token_name
 
 load_dotenv()
@@ -102,7 +102,7 @@ async def handle_event(event):
                         if token_price is not None:
                             amount = Decimal(amount) * Decimal(token_price['amountPerDollar'])
                     new_balance = str(Decimal(amount) / (10 ** 18) + Decimal(user.get('balance', 0)))
-                    update_wallet(user.get('walletAddress'), {"balance": new_balance})
+                    update_wallet(user.get('walletAddress'), {"balance": new_balance, 'lastDeposited': datetime.now()})
                             
             
 
