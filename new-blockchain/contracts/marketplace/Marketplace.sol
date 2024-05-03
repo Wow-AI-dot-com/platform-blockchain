@@ -34,6 +34,8 @@ contract Marketplace is OwnableUpgradeable, PausableUpgradeable {
         string rentURI
     );
 
+    event UpdateRentEvent(string indexed id, uint64 totalTimesEstimate);
+
     event EndRentEvent(
         string indexed id,
         address builder,
@@ -65,7 +67,7 @@ contract Marketplace is OwnableUpgradeable, PausableUpgradeable {
         uint64 _totalTimeEstimate,
         string memory _rateDollarPerHour,
         string memory _ipfsHash
-    ) public {
+    ) public onlyOwner {
         require(
             _builder != address(0) && _provider != address(0),
             "Not address 0"
@@ -108,7 +110,7 @@ contract Marketplace is OwnableUpgradeable, PausableUpgradeable {
         uint64[] memory _totalTimeEstimate,
         string[] memory _rateDollarPerHour,
         string[] memory _ipfsHash
-    ) public {
+    ) public onlyOwner {
         uint256 length = _ids.length;
         require(
             _providers.length == length &&
@@ -152,7 +154,25 @@ contract Marketplace is OwnableUpgradeable, PausableUpgradeable {
         }
     }
 
-    function finishRent(string memory _id, uint64 _endedAt) public {
+    function updateRent(
+        string memory _id,
+        uint64 _updatedTimes
+    ) public onlyOwner {
+        require(
+            _rentData[_id].builder != address(0) &&
+                _rentData[_id].provider != address(0),
+            "Not registered"
+        );
+        require(_rentData[_id].isCompleted == false, "Already completed");
+        require(_rentData[_id].isErrored == false, "Already stop");
+        _rentData[_id].totalTimesEstimate =
+            _rentData[_id].totalTimesEstimate +
+            _updatedTimes;
+
+        emit UpdateRentEvent(_id, _rentData[_id].totalTimesEstimate);
+    }
+
+    function finishRent(string memory _id, uint64 _endedAt) public onlyOwner {
         require(
             _rentData[_id].builder != address(0) &&
                 _rentData[_id].provider != address(0),
@@ -177,7 +197,10 @@ contract Marketplace is OwnableUpgradeable, PausableUpgradeable {
         );
     }
 
-    function resourceError(string memory _id, string memory reason) public {
+    function resourceError(
+        string memory _id,
+        string memory reason
+    ) public onlyOwner {
         require(
             _rentData[_id].builder != address(0) &&
                 _rentData[_id].provider != address(0),

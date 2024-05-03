@@ -14,6 +14,7 @@ contract UsageTracking {
         uint256 startTime;
         uint256 endTime;
         uint256 totalDeposit;
+        bool autoRental;
     }
 
     mapping(uint256 => UsageSession) public sessions; // Maps session IDs to UsageSessions
@@ -24,7 +25,8 @@ contract UsageTracking {
         uint256 indexed sessionId,
         uint256 indexed resourceId,
         uint256 depositAmount,
-        address user
+        address user,
+        bool autoRental
     );
     event SessionEnded(
         uint256 indexed sessionId,
@@ -61,7 +63,8 @@ contract UsageTracking {
             user: msg.sender,
             startTime: block.timestamp,
             endTime: 0, // Indicates the session is currently active
-            totalDeposit: totalDeposit
+            totalDeposit: totalDeposit,
+            autoRental: false
         });
 
         activeSessionsCount[_resourceId]++; // Increment the count of active sessions for this resource
@@ -69,31 +72,30 @@ contract UsageTracking {
             nextSessionId,
             _resourceId,
             totalDeposit,
-            msg.sender
+            msg.sender,
+            false
         );
         nextSessionId++;
     }
 
-    // function startSessionAutoRental() external {
-    //     ResourceRegistration.Resource memory resource = resourceRegistration
-    //         .getResource(_resourceId);
-    //     require(resource.available, "Resource not available");
-    //     require(
-    //         activeSessionsCount[_resourceId] < resource.maxConcurrentSessions,
-    //         "Resource at full capacity"
-    //     );
+    function startSessionAutoRental() external {
+        uint256 totalDeposit = pricingContract.calculateForDepositForAutoRental(
+            msg.sender
+        );
 
-    //     sessions[nextSessionId] = UsageSession({
-    //         resourceId: _resourceId,
-    //         user: msg.sender,
-    //         startTime: block.timestamp,
-    //         endTime: 0 // Indicates the session is currently active
-    //     });
+        sessions[nextSessionId] = UsageSession({
+            resourceId: 0,
+            user: msg.sender,
+            startTime: block.timestamp,
+            endTime: 0, // Indicates the session is currently active
+            totalDeposit: totalDeposit,
+            autoRental: true
+        });
 
-    //     activeSessionsCount[_resourceId]++; // Increment the count of active sessions for this resource
-    //     emit SessionStarted(nextSessionId, _resourceId, msg.sender);
-    //     nextSessionId++;
-    // }
+        activeSessionsCount[0]++; // Increment the count of active sessions for this resource
+        emit SessionStarted(nextSessionId, 0, totalDeposit, msg.sender, true);
+        nextSessionId++;
+    }
 
     function startMultiSessions(
         uint256[] memory _resourceIds,
@@ -124,7 +126,8 @@ contract UsageTracking {
                 user: msg.sender,
                 startTime: block.timestamp,
                 endTime: 0, // Indicates the session is currently active
-                totalDeposit: totalDeposit
+                totalDeposit: totalDeposit,
+                autoRental: false
             });
 
             activeSessionsCount[_resourceId]++; // Increment the count of active sessions for this resource
@@ -132,7 +135,8 @@ contract UsageTracking {
                 nextSessionId,
                 _resourceId,
                 totalDeposit,
-                msg.sender
+                msg.sender,
+                false
             );
             nextSessionId++;
         }

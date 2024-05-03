@@ -20,7 +20,7 @@ contract ResourceRegistration {
     Resource[] public resources;
     mapping(uint256 => address) public resourceToOwner; // Maps resource ID to owner address
     mapping(uint256 => bool) public reportedResources; // Tracks resources that have been reported for review
-    uint256 public nextResourceId = 0;
+    uint256 public nextResourceId = 1;
 
     // Events
     event ResourceRegistered(
