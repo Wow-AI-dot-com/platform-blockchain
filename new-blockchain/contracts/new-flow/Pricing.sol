@@ -11,7 +11,7 @@ contract Pricing is Ownable, ReentrancyGuard {
     ResourceRegistration public resourceRegistration;
 
     uint256 public constant HOUR_IN_SECOND = 3600;
-    uint256 public autoRentalPrice = 50;
+    uint256 public autoRentalPrice;
 
     mapping(address => uint256) public userBalances;
 
@@ -29,12 +29,14 @@ contract Pricing is Ownable, ReentrancyGuard {
 
     constructor(
         address _tokenAddress,
-        address _resourceRegistrationAddress
+        address _resourceRegistrationAddress,
+        uint256 _autoRentalPrice
     ) Ownable() {
         token = IERC20(_tokenAddress);
         resourceRegistration = ResourceRegistration(
             _resourceRegistrationAddress
         );
+        autoRentalPrice = _autoRentalPrice;
     }
 
     modifier onlyResourceRegistration() {
