@@ -298,7 +298,7 @@ describe("UsageTracking", async () => {
       await ethers.provider.send("evm_increaseTime", [3600]); // Increase time by 1 hour
 
       tx = await UsageTrackingContract.connect(deployer).endMultiSessions(
-        resourceIds
+        sessionData
       );
       await tx.wait();
 
@@ -328,7 +328,7 @@ describe("UsageTracking", async () => {
       await ethers.provider.send("evm_increaseTime", [3600]); // Increase time by 1 hour
 
       tx = await UsageTrackingContract.connect(deployer).endMultiSessions(
-        resourceIds
+        sessionData
       );
       await tx.wait();
 
