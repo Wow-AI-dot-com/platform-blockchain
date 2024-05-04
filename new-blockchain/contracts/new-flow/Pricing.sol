@@ -5,13 +5,15 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./ResourceRegistration.sol";
+import "./UsageTracking.sol";
 
 contract Pricing is Ownable, ReentrancyGuard {
     IERC20 public token;
     ResourceRegistration public resourceRegistration;
+    UsageTracking public usageTracking;
 
     uint256 public constant HOUR_IN_SECOND = 3600;
-    uint256 public autoRentalPrice;
+    uint256 public autoRentalPrice = 50000000000000000000;
 
     mapping(address => uint256) public userBalances;
 
@@ -29,22 +31,25 @@ contract Pricing is Ownable, ReentrancyGuard {
 
     constructor(
         address _tokenAddress,
-        address _resourceRegistrationAddress,
-        uint256 _autoRentalPrice
+        address _resourceRegistrationAddress
     ) Ownable() {
         token = IERC20(_tokenAddress);
         resourceRegistration = ResourceRegistration(
             _resourceRegistrationAddress
         );
-        autoRentalPrice = _autoRentalPrice;
     }
 
-    modifier onlyResourceRegistration() {
+    modifier onlyUsageTracking() {
         require(
-            msg.sender == address(resourceRegistration),
-            "Only the resource registration contract can call this function"
+            msg.sender == address(usageTracking),
+            "Only the usage tracking contract can call this function"
         );
         _;
+    }
+
+    // Set the UsageTracking contract address
+    function setUsageContractAddress(address _usageTracking) public onlyOwner {
+        usageTracking = UsageTracking(_usageTracking);
     }
 
     // Function for users to deposit AXB tokens into their balance within the contract
@@ -72,7 +77,7 @@ contract Pricing is Ownable, ReentrancyGuard {
         uint256 resourceId,
         uint256 durationInSeconds,
         uint256 totalDeposit
-    ) external nonReentrant onlyResourceRegistration {
+    ) external nonReentrant onlyUsageTracking {
         uint256 pricePerHour = resourceRegistration.getResourcePricePerHour(
             resourceId
         );
@@ -101,7 +106,7 @@ contract Pricing is Ownable, ReentrancyGuard {
         uint256 _pricePerHour,
         uint256 _durationInHours,
         address _user
-    ) public onlyResourceRegistration returns (uint256) {
+    ) public onlyUsageTracking returns (uint256) {
         require(
             _pricePerHour > 0 && _durationInHours > 0,
             "Invalid price or duration"
@@ -116,7 +121,7 @@ contract Pricing is Ownable, ReentrancyGuard {
 
     function calculateForDepositForAutoRental(
         address _user
-    ) public onlyResourceRegistration returns (uint256) {
+    ) public onlyUsageTracking returns (uint256) {
         require(userBalances[_user] > autoRentalPrice, "Invalid balance");
         userBalances[_user] -= autoRentalPrice;
         userDeposit[_user] += autoRentalPrice;

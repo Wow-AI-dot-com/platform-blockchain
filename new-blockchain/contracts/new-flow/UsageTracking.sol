@@ -19,6 +19,7 @@ contract UsageTracking {
 
     mapping(uint256 => UsageSession) public sessions; // Maps session IDs to UsageSessions
     mapping(uint256 => uint256) public activeSessionsCount; // Maps resource IDs to count of active sessions
+    mapping(address => uint256[]) public userActiveSessionList; // Maps resource IDs to count of active sessions
     uint256 public nextSessionId = 0;
 
     event SessionStarted(
@@ -66,6 +67,7 @@ contract UsageTracking {
             totalDeposit: totalDeposit,
             autoRental: false
         });
+        userActiveSessionList[msg.sender].push(nextSessionId);
 
         activeSessionsCount[_resourceId]++; // Increment the count of active sessions for this resource
         emit SessionStarted(
@@ -91,6 +93,7 @@ contract UsageTracking {
             totalDeposit: totalDeposit,
             autoRental: true
         });
+        userActiveSessionList[msg.sender].push(nextSessionId);
 
         activeSessionsCount[0]++; // Increment the count of active sessions for this resource
         emit SessionStarted(nextSessionId, 0, totalDeposit, msg.sender, true);
@@ -129,6 +132,7 @@ contract UsageTracking {
                 totalDeposit: totalDeposit,
                 autoRental: false
             });
+            userActiveSessionList[msg.sender].push(nextSessionId);
 
             activeSessionsCount[_resourceId]++; // Increment the count of active sessions for this resource
             emit SessionStarted(
@@ -156,6 +160,14 @@ contract UsageTracking {
 
         session.endTime = block.timestamp;
         activeSessionsCount[session.resourceId]--; // Decrement the count of active sessions for this resource
+        uint256[] storage userSessions = userActiveSessionList[msg.sender];
+        for (uint i = 0; i < userSessions.length; i++) {
+            if (userSessions[i] == _sessionId) {
+                userSessions[i] = userSessions[userSessions.length - 1];
+                userSessions.pop();
+                break;
+            }
+        }
 
         emit SessionEnded(_sessionId, session.resourceId, msg.sender);
 
@@ -208,5 +220,19 @@ contract UsageTracking {
         uint256 _resourceId
     ) external view returns (uint256) {
         return activeSessionsCount[_resourceId];
+    }
+
+    // Get sessions of address
+    function getActiveSessionByAddress(
+        address _user
+    ) public view returns (uint256[] memory) {
+        return userActiveSessionList[_user];
+    }
+
+    // Get sessions data
+    function getSession(
+        uint256 _index
+    ) public view returns (UsageSession memory) {
+        return sessions[_index];
     }
 }

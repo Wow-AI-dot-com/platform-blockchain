@@ -12,7 +12,7 @@
     "fork-eth": "npx hardhat node --fork https://mainnet.infura.io/v3/dea2c8c95a674dab87bbd16f7921caf2",
     "deployCaptcha:eth": "npx hardhat run ./scripts/coin/deployCaptchaMain.ts --network ethereum",
     "verify:eth": " npx hardhat verify  0xE7E3dc7F1f7B58112881bE21fc71B34Eb7c2A773 --network ethereum",
-    "test": "npx hardhat run ./scripts/coin/deployATM88Main.ts --network polygon"
+    "test": "npx hardhat test"
   },
   "devDependencies": {
     "@nomiclabs/hardhat-ethers": "^2.0.5",

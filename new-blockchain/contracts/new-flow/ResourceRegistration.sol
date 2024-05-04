@@ -18,9 +18,10 @@ contract ResourceRegistration {
     }
 
     Resource[] public resources;
+    mapping(address => uint256[]) public ownerResourceList; // Maps resource ID to owner address
     mapping(uint256 => address) public resourceToOwner; // Maps resource ID to owner address
     mapping(uint256 => bool) public reportedResources; // Tracks resources that have been reported for review
-    uint256 public nextResourceId = 1;
+    uint256 public nextResourceId = 0;
 
     // Events
     event ResourceRegistered(
@@ -76,6 +77,7 @@ contract ResourceRegistration {
             })
         );
         resourceToOwner[nextResourceId] = msg.sender;
+        ownerResourceList[msg.sender].push(nextResourceId);
         emit ResourceRegistered(nextResourceId, _resourceType, _provider);
         nextResourceId++;
     }
@@ -118,6 +120,8 @@ contract ResourceRegistration {
                 })
             );
             resourceToOwner[nextResourceId] = msg.sender;
+            ownerResourceList[msg.sender].push(nextResourceId);
+
             emit ResourceRegistered(
                 nextResourceId,
                 _resourceTypes[i],
@@ -199,5 +203,12 @@ contract ResourceRegistration {
     // Get total number of resources
     function getTotalResources() public view returns (uint256) {
         return nextResourceId;
+    }
+
+    // Get resources of address
+    function getResourceByAddress(
+        address _owner
+    ) public view returns (uint256[] memory) {
+        return ownerResourceList[_owner];
     }
 }
