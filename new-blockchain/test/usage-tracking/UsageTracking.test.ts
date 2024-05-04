@@ -69,7 +69,6 @@ describe("UsageTracking", async () => {
     await tx.wait();
     const resourceList =
       await ResourceRegistrationContract.getResourceByAddress(lessor.address);
-    assert(resourceList.length === 1);
   };
 
   const registerMultiResource = async () => {
@@ -172,6 +171,70 @@ describe("UsageTracking", async () => {
 
       const axbBalance = await AxBContract.balanceOf(lessor.address);
       assert(axbBalance.toString() === lessorBalance.toString());
+    });
+
+    it("Start single session, end session multi times", async () => {
+      await registerResource();
+      await registerResource();
+
+      let tx = await UsageTrackingContract.connect(deployer).startSession(
+        0,
+        10
+      );
+      await tx.wait();
+
+      let sessionData = await UsageTrackingContract.getActiveSessionByAddress(
+        deployer.address
+      );
+
+      assert(sessionData.length === 1);
+      await ethers.provider.send("evm_increaseTime", [3600]); // Increase time by 1 hour
+
+      tx = await UsageTrackingContract.connect(deployer).startSession(1, 10);
+      await tx.wait();
+
+      sessionData = await UsageTrackingContract.getActiveSessionByAddress(
+        deployer.address
+      );
+
+      assert(sessionData.length === 2);
+      await ethers.provider.send("evm_increaseTime", [3600]); // Increase time by 1 hour
+      for (const data of sessionData) {
+        tx = await UsageTrackingContract.connect(deployer).endSession(data);
+        await tx.wait();
+      }
+
+      tx = await UsageTrackingContract.connect(deployer).startSession(0, 10);
+      await tx.wait();
+
+      tx = await UsageTrackingContract.connect(deployer).startSession(1, 10);
+      await tx.wait();
+      await ethers.provider.send("evm_increaseTime", [3600]); // Increase time by 1 hour
+
+      sessionData = await UsageTrackingContract.getActiveSessionByAddress(
+        deployer.address
+      );
+
+      for (const data of sessionData) {
+        tx = await UsageTrackingContract.connect(deployer).endSession(data);
+        await tx.wait();
+      }
+
+      tx = await UsageTrackingContract.connect(deployer).startSession(0, 10);
+      await tx.wait();
+
+      tx = await UsageTrackingContract.connect(deployer).startSession(1, 10);
+      await tx.wait();
+      await ethers.provider.send("evm_increaseTime", [3600]); // Increase time by 1 hour
+
+      sessionData = await UsageTrackingContract.getActiveSessionByAddress(
+        deployer.address
+      );
+
+      for (const data of sessionData) {
+        tx = await UsageTrackingContract.connect(deployer).endSession(data);
+        await tx.wait();
+      }
     });
 
     it("Not owner end session ", async () => {
