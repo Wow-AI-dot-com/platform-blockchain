@@ -1,4 +1,4 @@
-# AiXBlock: Decentralized Compute Marketplace
+# AIxBlock: Decentralized Compute Marketplace
 
 This part implements a decentralized marketplace for computing resources, allowing users to register resources (e.g., GPUs, CPUs), track usage, and handle billing through smart contracts on the EVM-based blockchain.
 
