@@ -40,7 +40,6 @@ describe("ResourceRegistration", async () => {
       const ram = 12;
       const disk = 1024;
       const pricePerHour = "5000000000000000000";
-      const maxConcurrentSessions = 1;
       const tx = await ResourceRegistrationContract.connect(
         deployer
       ).registerResource(
@@ -51,7 +50,6 @@ describe("ResourceRegistration", async () => {
         ram,
         disk,
         pricePerHour,
-        maxConcurrentSessions
       );
       await tx.wait();
       const resourceList =
@@ -68,7 +66,6 @@ describe("ResourceRegistration", async () => {
       const ram = 12;
       const disk = 1024;
       const pricePerHour = "5000000000000000000";
-      const maxConcurrentSessions = 1;
       let tx = await ResourceRegistrationContract.connect(
         deployer
       ).registerResource(
@@ -79,7 +76,6 @@ describe("ResourceRegistration", async () => {
         ram,
         disk,
         pricePerHour,
-        maxConcurrentSessions
       );
       await tx.wait();
 
@@ -108,7 +104,6 @@ describe("ResourceRegistration", async () => {
       const ram = [12, 12];
       const disk = [1024, 12];
       const pricePerHour = ["5000000000000000000", "5000000000000000000"];
-      const maxConcurrentSessions = [1, 1];
       const tx = await ResourceRegistrationContract.connect(
         deployer
       ).registerMultiResources(
@@ -119,7 +114,6 @@ describe("ResourceRegistration", async () => {
         ram,
         disk,
         pricePerHour,
-        maxConcurrentSessions
       );
       await tx.wait();
       const resourceList =

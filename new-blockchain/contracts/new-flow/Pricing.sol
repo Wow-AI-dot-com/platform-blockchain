@@ -135,4 +135,8 @@ contract Pricing is Ownable, ReentrancyGuard {
         autoRentalPrice = amount;
         emit AutoRentalPriceUpdated(autoRentalPrice);
     }
+
+    function getUserBalance(address _user) public view returns (uint256) {
+        return userBalances[_user];
+    }
 }

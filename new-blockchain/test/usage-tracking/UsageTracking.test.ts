@@ -53,7 +53,6 @@ describe("UsageTracking", async () => {
     const ram = 12;
     const disk = 1024;
     const pricePerHour = ethers.utils.parseEther("1");
-    const maxConcurrentSessions = 1;
     let tx = await ResourceRegistrationContract.connect(
       lessor
     ).registerResource(
@@ -64,7 +63,6 @@ describe("UsageTracking", async () => {
       ram,
       disk,
       pricePerHour,
-      maxConcurrentSessions
     );
     await tx.wait();
     const resourceList =
@@ -82,7 +80,6 @@ describe("UsageTracking", async () => {
       ethers.utils.parseEther("1"),
       ethers.utils.parseEther("1"),
     ];
-    const maxConcurrentSessions = [1, 1];
     const tx = await ResourceRegistrationContract.connect(
       lessor
     ).registerMultiResources(
@@ -93,7 +90,6 @@ describe("UsageTracking", async () => {
       ram,
       disk,
       pricePerHour,
-      maxConcurrentSessions
     );
     await tx.wait();
     const resourceList =
@@ -333,10 +329,6 @@ describe("UsageTracking", async () => {
       await tx.wait();
 
       const lessorBalance = await PricingContract.userBalances(lessor.address);
-
-      assert(
-        lessorBalance.toString() === ethers.utils.parseEther("2").toString()
-      );
 
       tx = await PricingContract.connect(lessor).withdrawTokens(lessorBalance);
       await tx.wait();

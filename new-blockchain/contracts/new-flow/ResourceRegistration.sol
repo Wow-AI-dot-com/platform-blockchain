@@ -13,7 +13,6 @@ contract ResourceRegistration {
         uint256 disk; // Disk space in GB
         uint256 pricePerHour; // Price per hour in tokens
         bool available; // Availability of the resource
-        uint256 maxConcurrentSessions; // NEW: Max number of concurrent sessions
         bool underVerification; // Indicates whether the resource is under verification due to a report
     }
 
@@ -58,8 +57,7 @@ contract ResourceRegistration {
         uint256 _gpu,
         uint256 _ram,
         uint256 _disk,
-        uint256 _pricePerHour,
-        uint256 _maxConcurrentSessions
+        uint256 _pricePerHour
     ) public {
         resources.push(
             Resource({
@@ -72,7 +70,6 @@ contract ResourceRegistration {
                 disk: _disk,
                 pricePerHour: _pricePerHour,
                 available: true,
-                maxConcurrentSessions: _maxConcurrentSessions,
                 underVerification: false // Initially, resources are not under verification
             })
         );
@@ -89,8 +86,7 @@ contract ResourceRegistration {
         uint256[] memory _gpus,
         uint256[] memory _rams,
         uint256[] memory _disks,
-        uint256[] memory _pricesPerHour,
-        uint256[] memory _maxConcurrentSessions
+        uint256[] memory _pricesPerHour
     ) public {
         require(
             _resourceTypes.length == _providers.length &&
@@ -98,8 +94,7 @@ contract ResourceRegistration {
                 _cpus.length == _gpus.length &&
                 _gpus.length == _rams.length &&
                 _rams.length == _disks.length &&
-                _disks.length == _pricesPerHour.length &&
-                _pricesPerHour.length == _maxConcurrentSessions.length,
+                _disks.length == _pricesPerHour.length,
             "All input arrays must have the same length"
         );
 
@@ -115,7 +110,6 @@ contract ResourceRegistration {
                     disk: _disks[i],
                     pricePerHour: _pricesPerHour[i],
                     available: true,
-                    maxConcurrentSessions: _maxConcurrentSessions[i],
                     underVerification: false // Initially, resources are not under verification
                 })
             );

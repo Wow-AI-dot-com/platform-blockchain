@@ -49,10 +49,6 @@ contract UsageTracking {
         ResourceRegistration.Resource memory resource = resourceRegistration
             .getResource(_resourceId);
         require(resource.available, "Resource not available");
-        require(
-            activeSessionsCount[_resourceId] < resource.maxConcurrentSessions,
-            "Resource at full capacity"
-        );
         uint256 totalDeposit = pricingContract.calculateForDeposit(
             resource.pricePerHour,
             _totalHoursEstimate,
@@ -113,11 +109,6 @@ contract UsageTracking {
             ResourceRegistration.Resource memory resource = resourceRegistration
                 .getResource(_resourceId);
             require(resource.available, "Resource not available");
-            require(
-                activeSessionsCount[_resourceId] <
-                    resource.maxConcurrentSessions,
-                "Resource at full capacity"
-            );
             uint256 totalDeposit = pricingContract.calculateForDeposit(
                 resource.pricePerHour,
                 _totalHoursEstimate[i],
